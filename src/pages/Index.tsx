@@ -43,36 +43,32 @@ const Index = () => {
       <Navbar />
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden gradient-hero text-white">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC40Ij48cGF0aCBkPSJNMzYgMzRjMC0yLjIxLTEuNzktNC00LTRzLTQgMS43OS00IDQgMS43OSA0IDQgNCA0LTEuNzkgNC00em0wLTEwYzAtMi4yMS0xLjc5LTQtNC00cy00IDEuNzktNCA0IDEuNzkgNCA0IDQgNC0xLjc5IDQtNHptMC0xMGMwLTIuMjEtMS43OS00LTQtNHMtNCAxLjc5LTQgNCAxLjc5IDQgNCA0IDQtMS43OSA0LTR6Ii8+PC9nPjwvZz48L3N2Zz4=')] animate-float"></div>
-        </div>
-
-        <div className="container mx-auto px-4 py-24 relative">
-          <div className="max-w-4xl mx-auto text-center space-y-8">
-            <h1 className="text-5xl md:text-7xl font-bold leading-tight animate-fade-in">
+      <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary-dark to-secondary text-white py-20">
+        <div className="container mx-auto px-4 relative">
+          <div className="max-w-3xl mx-auto text-center space-y-8">
+            <h1 className="text-4xl md:text-6xl font-bold leading-tight animate-fade-in">
               Empowering Citizens Through
-              <span className="block mt-2 text-secondary-light">Smart Governance</span>
+              <span className="block mt-2">Smart Governance</span>
             </h1>
-            <p className="text-xl md:text-2xl text-white/90 max-w-2xl mx-auto animate-fade-in">
-              Your voice matters. File, track, and resolve grievances with transparency powered by AI and blockchain technology.
+            <p className="text-lg md:text-xl text-white/90 max-w-2xl mx-auto">
+              Your voice matters. File, track, and resolve grievances with transparency.
             </p>
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-4 justify-center pt-4">
-              <Button asChild size="lg" className="bg-white text-primary hover:bg-white/90 shadow-xl text-lg px-8">
+              <Button asChild size="lg" className="bg-white text-primary hover:bg-white/95 shadow-lg text-base px-8">
                 <Link to="/file-complaint">
                   <FileText className="w-5 h-5 mr-2" />
                   File Complaint
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="border-2 border-white text-white hover:bg-white/10 text-lg px-8">
+              <Button asChild size="lg" className="bg-secondary text-white hover:bg-secondary/90 shadow-lg text-base px-8">
                 <Link to="/track-complaint">
                   <Search className="w-5 h-5 mr-2" />
                   Track Complaint
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="border-2 border-white text-white hover:bg-white/10 text-lg px-8">
+              <Button asChild size="lg" className="bg-accent text-white hover:bg-accent/90 shadow-lg text-base px-8">
                 <Link to="/dashboard">
                   <BarChart3 className="w-5 h-5 mr-2" />
                   View Dashboard
@@ -82,26 +78,19 @@ const Index = () => {
           </div>
 
           {/* Stats */}
-          <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+          <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {[
               { icon: FileText, label: "Complaints Filed", value: stats.filed },
               { icon: CheckCircle, label: "Resolved", value: stats.resolved },
               { icon: Users, label: "Active Departments", value: stats.departments },
             ].map((stat, index) => (
-              <Card key={index} className="gradient-glass border-white/20 p-6 text-center">
-                <stat.icon className="w-12 h-12 mx-auto mb-3 text-secondary-light" />
-                <div className="text-4xl font-bold mb-2">{stat.value.toLocaleString()}</div>
-                <div className="text-sm text-white/80">{stat.label}</div>
+              <Card key={index} className="bg-white/10 backdrop-blur-sm border-white/20 p-6 text-center hover:bg-white/20 transition-colors">
+                <stat.icon className="w-10 h-10 mx-auto mb-3 text-white" />
+                <div className="text-3xl font-bold mb-2 text-white">{stat.value.toLocaleString()}</div>
+                <div className="text-sm text-white/90">{stat.label}</div>
               </Card>
             ))}
           </div>
-        </div>
-
-        {/* Animated Wave */}
-        <div className="absolute bottom-0 left-0 right-0">
-          <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full">
-            <path d="M0 0L60 10C120 20 240 40 360 46.7C480 53 600 47 720 43.3C840 40 960 40 1080 46.7C1200 53 1320 67 1380 73.3L1440 80V120H1380C1320 120 1200 120 1080 120C960 120 840 120 720 120C600 120 480 120 360 120C240 120 120 120 60 120H0V0Z" fill="white"/>
-          </svg>
         </div>
       </section>
 
