@@ -156,46 +156,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Department Bar Chart */}
-          <Card className="gradient-card shadow-lg p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <BarChart3 className="w-6 h-6 text-primary" />
-              <h2 className="text-xl font-bold">Complaints by Department</h2>
-            </div>
-
-            <div className="space-y-4">
-              {departmentData.map((dept, index) => {
-                const percentage = (dept.count / Math.max(...departmentData.map(d => d.count))) * 100;
-                const resolvedPercentage = (dept.resolved / dept.count) * 100;
-
-                return (
-                  <div key={index} className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium">{dept.name}</span>
-                      <span className="text-muted-foreground">
-                        {dept.resolved}/{dept.count}
-                      </span>
-                    </div>
-                    <div className="relative h-8 bg-muted rounded-lg overflow-hidden">
-                      <div
-                        className="absolute h-full bg-primary/20 transition-all duration-1000"
-                        style={{ width: `${percentage}%` }}
-                      />
-                      <div
-                        className="absolute h-full bg-primary transition-all duration-1000"
-                        style={{ width: `${(percentage * resolvedPercentage) / 100}%` }}
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center text-xs font-medium">
-                        {resolvedPercentage.toFixed(0)}% Resolved
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-
+        <div className="grid grid-cols-1 gap-8 mb-8">
           {/* Status Distribution */}
           <Card className="gradient-card shadow-lg p-6">
             <div className="flex items-center gap-3 mb-6">
@@ -270,18 +231,6 @@ const Dashboard = () => {
               <Locate className="w-4 h-4" />
               {isLoadingLocation ? "Detecting..." : "Refresh Location"}
             </Button>
-          </div>
-
-          {/* Google Maps Iframe */}
-          <div className="w-full h-96 rounded-lg overflow-hidden border border-border mb-6">
-            <iframe
-              src={`https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3502.1983901719867!2d${userLocation?.lng || 77.209023}!3d${userLocation?.lat || 28.613939}!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMjjCsDM2JzUwLjIiTiA3N8KwMTInMzIuNSJF!5e0!3m2!1sen!2sin!4v1629789012345!5m2!1sen!2sin`}
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              allowFullScreen
-              loading="lazy"
-            />
           </div>
 
           {/* Complaints Grid */}
