@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Upload, Sparkles, FileText, Send } from "lucide-react";
+import { MapPin, Upload, Sparkles, CheckCircle, Send, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card } from "@/components/ui/card";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { ComplaintTicket } from "@/components/ComplaintTicket";
 import { toast } from "sonner";
 
 const FileComplaint = () => {
@@ -24,6 +25,11 @@ const FileComplaint = () => {
   const [fileName, setFileName] = useState("");
   const [aiSuggestion, setAiSuggestion] = useState("");
   const [charCount, setCharCount] = useState(0);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
+  const [showTicket, setShowTicket] = useState(false);
+  const [complaintId, setComplaintId] = useState("");
+  const [resolutionTime, setResolutionTime] = useState("");
 
   const categories = [
     "Water Supply",
@@ -59,27 +65,73 @@ const FileComplaint = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleVerify = async () => {
     if (!formData.fullName || !formData.mobile || !formData.category || !formData.description) {
-      toast.error("Please fill all required fields");
+      toast.error("Please fill all required fields before verification");
       return;
     }
 
-    const complaintId = `LOK${Math.floor(Math.random() * 100000).toString().padStart(5, "0")}`;
+    setIsVerifying(true);
+
+    // Simulate AI verification process
+    setTimeout(() => {
+      // Check for duplicate complaints (mock check)
+      const isDuplicate = Math.random() < 0.3; // 30% chance of duplicate
+      
+      if (isDuplicate) {
+        toast.error("Similar complaint already exists in your area!", {
+          description: "Consider upvoting the existing complaint instead",
+          duration: 5000,
+        });
+        setIsVerifying(false);
+        return;
+      }
+
+      // Check for fake/invalid images (mock check)
+      const isFakeImage = fileName && Math.random() < 0.2; // 20% chance if file uploaded
+      
+      if (isFakeImage) {
+        toast.error("Uploaded image appears to be invalid or fake", {
+          description: "Please upload genuine evidence",
+          duration: 5000,
+        });
+        setIsVerifying(false);
+        return;
+      }
+
+      // Verification successful
+      setIsVerified(true);
+      setIsVerifying(false);
+      toast.success("Complaint verified successfully! You can now submit.", {
+        duration: 4000,
+      });
+    }, 2000);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!isVerified) {
+      toast.error("Please verify your complaint first");
+      return;
+    }
+
+    const newComplaintId = `LOK${Math.floor(Math.random() * 100000).toString().padStart(5, "0")}`;
     const date = new Date().toLocaleDateString("en-IN");
+    
+    // Calculate resolution time (7-14 days based on category)
+    const resolutionDays = Math.floor(Math.random() * 8) + 7;
+    const resolutionDate = new Date();
+    resolutionDate.setDate(resolutionDate.getDate() + resolutionDays);
+    const resolution = `${resolutionDays} days (by ${resolutionDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})`;
 
     // Store in localStorage
-    localStorage.setItem("lastComplaintId", complaintId);
+    localStorage.setItem("lastComplaintId", newComplaintId);
     localStorage.setItem("lastComplaintDate", date);
 
-    toast.success("Complaint filed successfully!");
-    
-    // Show success modal with complaint details
-    setTimeout(() => {
-      navigate(`/track-complaint?id=${complaintId}`);
-    }, 1500);
+    setComplaintId(newComplaintId);
+    setResolutionTime(resolution);
+    setShowTicket(true);
   };
 
   return (
@@ -234,17 +286,61 @@ const FileComplaint = () => {
                 </div>
               </div>
 
-              {/* Submit Button */}
-              <Button type="submit" size="lg" className="w-full bg-primary hover:bg-primary-dark shadow-md text-lg">
-                <Send className="w-5 h-5 mr-2" />
-                Submit Complaint
-              </Button>
+              {/* Verify and Submit Buttons */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Button 
+                  type="button"
+                  size="lg" 
+                  variant={isVerified ? "default" : "outline"}
+                  onClick={handleVerify}
+                  disabled={isVerifying || isVerified}
+                  className={`text-lg transition-all ${
+                    isVerified 
+                      ? "bg-secondary hover:bg-secondary/90 text-white shadow-lg shadow-secondary/50" 
+                      : ""
+                  }`}
+                >
+                  {isVerifying ? (
+                    <>
+                      <div className="w-5 h-5 mr-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Verifying...
+                    </>
+                  ) : isVerified ? (
+                    <>
+                      <CheckCircle className="w-5 h-5 mr-2" />
+                      Verified ✓
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-5 h-5 mr-2" />
+                      Verify Complaint
+                    </>
+                  )}
+                </Button>
+
+                <Button 
+                  type="submit" 
+                  size="lg" 
+                  disabled={!isVerified}
+                  className="text-lg bg-primary hover:bg-primary-dark shadow-md"
+                >
+                  <Send className="w-5 h-5 mr-2" />
+                  Submit Complaint
+                </Button>
+              </div>
             </form>
           </Card>
         </div>
       </main>
 
       <Footer />
+      
+      <ComplaintTicket 
+        open={showTicket}
+        onClose={() => setShowTicket(false)}
+        complaintId={complaintId}
+        resolutionTime={resolutionTime}
+      />
     </div>
   );
 };

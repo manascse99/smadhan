@@ -1,13 +1,21 @@
-import { useState } from "react";
-import { BarChart3, FileText, CheckCircle, Clock, TrendingUp } from "lucide-react";
+import { useState, useEffect } from "react";
+import { BarChart3, FileText, CheckCircle, Clock, TrendingUp, MapPin, Locate } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { ComplaintCard } from "@/components/ComplaintCard";
+import { mockComplaints } from "@/types/complaint";
+import { toast } from "sonner";
 
 const Dashboard = () => {
   const [filterDepartment, setFilterDepartment] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationAddress, setLocationAddress] = useState("");
+  const [complaints, setComplaints] = useState(mockComplaints);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
 
   const stats = [
     { label: "Total Filed", value: 2847, icon: FileText, color: "primary" },
@@ -33,6 +41,50 @@ const Dashboard = () => {
     { status: "Processing", count: 729, percentage: 26, color: "status-processing" },
     { status: "Resolved", count: 1156, percentage: 40, color: "status-resolved" },
   ];
+
+  useEffect(() => {
+    // Auto-detect location on mount
+    getUserLocation();
+  }, []);
+
+  const getUserLocation = () => {
+    setIsLoadingLocation(true);
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation({ lat: latitude, lng: longitude });
+          setLocationAddress(`Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`);
+          toast.success("Location detected successfully");
+          setIsLoadingLocation(false);
+        },
+        (error) => {
+          console.error("Location error:", error);
+          toast.error("Unable to access location. Please enable location services.");
+          setIsLoadingLocation(false);
+        }
+      );
+    } else {
+      toast.error("Geolocation is not supported by your browser");
+      setIsLoadingLocation(false);
+    }
+  };
+
+  const handleUpvote = (complaintId: string) => {
+    setComplaints(prev => 
+      prev.map(complaint => 
+        complaint.id === complaintId 
+          ? { ...complaint, hasUpvoted: !complaint.hasUpvoted }
+          : complaint
+      )
+    );
+  };
+
+  const filteredComplaints = complaints.filter(complaint => {
+    const matchesDept = filterDepartment === "all" || complaint.category === filterDepartment;
+    const matchesStatus = filterStatus === "all" || complaint.status === filterStatus;
+    return matchesDept && matchesStatus;
+  });
 
   return (
     <div className="min-h-screen flex flex-col bg-muted/30">
@@ -198,17 +250,61 @@ const Dashboard = () => {
           </Card>
         </div>
 
-        {/* Map Placeholder */}
-        <Card className="gradient-card shadow-lg p-6">
-          <h2 className="text-xl font-bold mb-6">Geographic Distribution</h2>
-          <div className="w-full h-96 bg-muted rounded-lg flex items-center justify-center">
-            <div className="text-center space-y-2">
-              <div className="w-24 h-24 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
-                <BarChart3 className="w-12 h-12 text-primary animate-pulse-slow" />
+        {/* Location-Based Complaints Section */}
+        <Card className="gradient-card shadow-lg p-6 mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <MapPin className="w-6 h-6 text-primary" />
+              <div>
+                <h2 className="text-xl font-bold">Complaints Near You</h2>
+                <p className="text-sm text-muted-foreground">{locationAddress || "Detecting your location..."}</p>
               </div>
-              <p className="text-muted-foreground">Interactive Map View</p>
-              <p className="text-sm text-muted-foreground">Complaint hotspots across regions</p>
             </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={getUserLocation}
+              disabled={isLoadingLocation}
+              className="gap-2"
+            >
+              <Locate className="w-4 h-4" />
+              {isLoadingLocation ? "Detecting..." : "Refresh Location"}
+            </Button>
+          </div>
+
+          {/* Google Maps Iframe */}
+          <div className="w-full h-96 rounded-lg overflow-hidden border border-border mb-6">
+            <iframe
+              src={`https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3502.1983901719867!2d${userLocation?.lng || 77.209023}!3d${userLocation?.lat || 28.613939}!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMjjCsDM2JzUwLjIiTiA3N8KwMTInMzIuNSJF!5e0!3m2!1sen!2sin!4v1629789012345!5m2!1sen!2sin`}
+              width="100%"
+              height="100%"
+              style={{ border: 0 }}
+              allowFullScreen
+              loading="lazy"
+            />
+          </div>
+
+          {/* Complaints Grid */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-lg">
+              {filteredComplaints.length} Complaints Found in Your Area
+            </h3>
+            {filteredComplaints.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredComplaints.map(complaint => (
+                  <ComplaintCard 
+                    key={complaint.id} 
+                    complaint={complaint}
+                    onUpvote={handleUpvote}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 bg-muted/50 rounded-lg">
+                <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                <p className="text-muted-foreground">No complaints found matching your filters</p>
+              </div>
+            )}
           </div>
         </Card>
       </main>
