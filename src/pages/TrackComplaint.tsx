@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Search, CheckCircle, Clock, Wrench, FileCheck, ThumbsUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ const TrackComplaint = () => {
   const [showResult, setShowResult] = useState(!!initialId);
   const [upvotes, setUpvotes] = useState(42);
   const [hasUpvoted, setHasUpvoted] = useState(false);
+  const [progressWidth, setProgressWidth] = useState(0);
 
   const mockComplaint = {
     id: complaintId || "LOK12345",
@@ -34,6 +35,12 @@ const TrackComplaint = () => {
     { status: "In Process", icon: Wrench, completed: true },
     { status: "Resolved", icon: Clock, completed: false },
   ];
+
+  useEffect(() => {
+    const target = (mockComplaint.status / (timeline.length - 1)) * 100;
+    const id = requestAnimationFrame(() => setProgressWidth(target));
+    return () => cancelAnimationFrame(id);
+  }, [mockComplaint.status]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,13 +120,8 @@ const TrackComplaint = () => {
                   {/* Progress Line */}
                   <div className="absolute top-8 left-0 right-0 h-1 bg-border overflow-hidden">
                     <div
-                      className="h-full transition-all duration-1000 ease-out"
-                      style={{ 
-                        width: `${(mockComplaint.status / (timeline.length - 1)) * 100}%`,
-                        background: 'hsl(145, 65%, 45%)',
-                        boxShadow: '0 0 20px hsl(145, 65%, 45%), 0 0 40px hsl(145, 65%, 45%, 0.5)',
-                        animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
-                      }}
+                      className="h-full progress-fill transition-[width] duration-1000 ease-out"
+                      style={{ width: `${progressWidth}%` }}
                     />
                   </div>
 

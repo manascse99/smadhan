@@ -127,6 +127,27 @@ All colors MUST be HSL.
     }
   }
 
+  /* Progress Fill Utilities */
+  .progress-fill {
+    position: relative;
+    background: linear-gradient(90deg, hsl(var(--secondary)) 0%, hsl(var(--secondary)) 60%, hsl(145 65% 55%) 100%);
+    box-shadow: 0 0 14px hsl(var(--secondary) / 0.8), 0 0 28px hsl(var(--secondary) / 0.4);
+  }
+  .progress-fill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.2), transparent);
+    background-size: 200% 100%;
+    animation: progress-shimmer 1.5s linear infinite;
+    pointer-events: none;
+    mix-blend-mode: screen;
+  }
+  @keyframes progress-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
   .status-badge {
     @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium;
   }
