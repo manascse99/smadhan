@@ -96,27 +96,35 @@ const Transparency = () => {
               <div key={index} className="flex items-center">
                 <div className="relative">
                   <div 
-                    className="w-32 h-32 rounded-xl bg-gradient-hero shadow-glow flex items-center justify-center animate-float"
-                    style={{ animationDelay: `${index * 0.3}s` }}
+                    className="w-32 h-32 rounded-xl flex items-center justify-center animate-float relative z-10"
+                    style={{ 
+                      animationDelay: `${index * 0.3}s`,
+                      background: 'linear-gradient(135deg, hsl(220, 80%, 55%) 0%, hsl(220, 85%, 45%) 50%, hsl(145, 65%, 50%) 100%)',
+                      boxShadow: '0 0 30px hsl(220, 80%, 55%, 0.6), 0 8px 24px hsla(220, 15%, 20%, 0.2)'
+                    }}
                   >
                     <div className="text-center p-2">
                       <div className="text-xl font-bold text-white mb-1">{block.title}</div>
-                      <div className="text-xs text-white/80 leading-tight">{block.desc}</div>
+                      <div className="text-xs text-white leading-tight">{block.desc}</div>
                     </div>
                   </div>
                   {/* Animated Glow effect */}
                   <div 
-                    className="absolute inset-0 rounded-xl bg-primary/30 blur-xl animate-glow" 
-                    style={{ animationDelay: `${index * 0.3}s` }}
+                    className="absolute inset-0 rounded-xl blur-xl animate-glow" 
+                    style={{ 
+                      animationDelay: `${index * 0.3}s`,
+                      background: 'hsl(220, 80%, 55%, 0.4)'
+                    }}
                   />
                 </div>
                 {index < 3 && (
                   <div className="hidden md:block relative w-16 h-1 bg-border overflow-hidden">
                     <div 
-                      className="absolute inset-0 h-full bg-gradient-to-r from-primary to-secondary animate-pulse-slow"
+                      className="absolute inset-0 h-full animate-pulse-slow"
                       style={{ 
                         animationDelay: `${index * 0.5}s`,
-                        boxShadow: '0 0 8px hsl(var(--primary))'
+                        background: 'linear-gradient(90deg, hsl(220, 80%, 55%), hsl(145, 65%, 50%))',
+                        boxShadow: '0 0 12px hsl(220, 80%, 55%)'
                       }}
                     />
                   </div>

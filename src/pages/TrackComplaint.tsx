@@ -111,12 +111,13 @@ const TrackComplaint = () => {
 
                 <div className="relative">
                   {/* Progress Line */}
-                  <div className="absolute top-8 left-0 right-0 h-1 bg-muted overflow-hidden">
+                  <div className="absolute top-8 left-0 right-0 h-1 bg-border overflow-hidden">
                     <div
-                      className="h-full bg-secondary transition-all duration-1000 ease-out"
+                      className="h-full transition-all duration-1000 ease-out"
                       style={{ 
                         width: `${(mockComplaint.status / (timeline.length - 1)) * 100}%`,
-                        boxShadow: '0 0 10px hsl(var(--secondary))',
+                        background: 'hsl(145, 65%, 45%)',
+                        boxShadow: '0 0 20px hsl(145, 65%, 45%), 0 0 40px hsl(145, 65%, 45%, 0.5)',
                         animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
                       }}
                     />
