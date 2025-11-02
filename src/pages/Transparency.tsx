@@ -87,16 +87,21 @@ const Transparency = () => {
           <h2 className="text-2xl font-bold mb-8 text-center">Immutable Record Chain</h2>
 
           <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8 mb-8">
-            {[1, 2, 3, 4].map((block, index) => (
+            {[
+              { title: "Filed", desc: "Complaint Registered" },
+              { title: "Verified", desc: "AI Validated" },
+              { title: "Routed", desc: "Dept Assigned" },
+              { title: "Secured", desc: "Polygon Chain" }
+            ].map((block, index) => (
               <div key={index} className="flex items-center">
                 <div className="relative">
                   <div 
-                    className="w-24 h-24 rounded-xl bg-gradient-hero shadow-glow flex items-center justify-center animate-float"
+                    className="w-32 h-32 rounded-xl bg-gradient-hero shadow-glow flex items-center justify-center animate-float"
                     style={{ animationDelay: `${index * 0.3}s` }}
                   >
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-white">#{block}</div>
-                      <div className="text-xs text-white/70">Block</div>
+                    <div className="text-center p-2">
+                      <div className="text-xl font-bold text-white mb-1">{block.title}</div>
+                      <div className="text-xs text-white/80 leading-tight">{block.desc}</div>
                     </div>
                   </div>
                   {/* Animated Glow effect */}
