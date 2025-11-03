@@ -22,7 +22,9 @@ const FileComplaint = () => {
     description: "",
     location: "",
   });
-  const [fileName, setFileName] = useState("");
+  const [images, setImages] = useState<File[]>([]);
+  const [video, setVideo] = useState<File | null>(null);
+  const [voiceNote, setVoiceNote] = useState<File | null>(null);
   const [aiSuggestion, setAiSuggestion] = useState("");
   const [charCount, setCharCount] = useState(0);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -42,12 +44,35 @@ const FileComplaint = () => {
     "Corruption",
   ];
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length + images.length > 5) {
+      toast.error("Maximum 5 images allowed");
+      return;
+    }
+    setImages([...images, ...files]);
+    toast.success(`${files.length} image(s) uploaded`);
+  };
+
+  const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setFileName(file.name);
-      toast.success("File uploaded successfully");
+      setVideo(file);
+      toast.success("Video uploaded successfully");
     }
+  };
+
+  const handleVoiceNoteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setVoiceNote(file);
+      toast.success("Voice note uploaded successfully");
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setImages(images.filter((_, i) => i !== index));
+    toast.success("Image removed");
   };
 
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -71,6 +96,11 @@ const FileComplaint = () => {
       return;
     }
 
+    if (images.length < 2) {
+      toast.error("Please upload at least 2 images");
+      return;
+    }
+
     setIsVerifying(true);
 
     // Simulate AI verification process
@@ -88,7 +118,7 @@ const FileComplaint = () => {
       }
 
       // Check for fake/invalid images (mock check)
-      const isFakeImage = fileName && Math.random() < 0.2; // 20% chance if file uploaded
+      const isFakeImage = images.length > 0 && Math.random() < 0.2; // 20% chance if images uploaded
       
       if (isFakeImage) {
         toast.error("Uploaded image appears to be invalid or fake", {
@@ -261,25 +291,93 @@ const FileComplaint = () => {
                 </div>
               </div>
 
-              {/* File Upload */}
-              <div className="space-y-2">
-                <Label htmlFor="file">Upload Evidence (Photo/Video/Audio)</Label>
+              {/* Image Upload (Required: 2-5 images) */}
+              <div className="space-y-3">
+                <Label htmlFor="images">Upload Images * (Min 2, Max 5)</Label>
                 <div className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary transition-colors">
                   <input
                     type="file"
-                    id="file"
+                    id="images"
                     className="hidden"
-                    accept="image/*,video/*,audio/*"
-                    onChange={handleFileChange}
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageChange}
                   />
-                  <label htmlFor="file" className="flex flex-col items-center gap-3 cursor-pointer">
+                  <label htmlFor="images" className="flex flex-col items-center gap-3 cursor-pointer">
                     <Upload className="w-10 h-10 text-muted-foreground" />
-                    {fileName ? (
-                      <p className="text-sm font-medium text-primary">{fileName}</p>
+                    <p className="text-sm font-medium">Click to upload images</p>
+                    <p className="text-xs text-muted-foreground">Required: 2-5 images (JPG, PNG, WEBP)</p>
+                  </label>
+                </div>
+                {images.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
+                    {images.map((img, idx) => (
+                      <div key={idx} className="relative group">
+                        <img 
+                          src={URL.createObjectURL(img)} 
+                          alt={`Upload ${idx + 1}`}
+                          className="w-full h-32 object-cover rounded-lg border border-border"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(idx)}
+                          className="absolute top-1 right-1 bg-destructive text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">{images.length}/5 images uploaded</p>
+              </div>
+
+              {/* Video Upload (Optional) */}
+              <div className="space-y-2">
+                <Label htmlFor="video">Upload Video (Optional)</Label>
+                <div className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary transition-colors">
+                  <input
+                    type="file"
+                    id="video"
+                    className="hidden"
+                    accept="video/*"
+                    onChange={handleVideoChange}
+                  />
+                  <label htmlFor="video" className="flex flex-col items-center gap-3 cursor-pointer">
+                    <Upload className="w-10 h-10 text-muted-foreground" />
+                    {video ? (
+                      <p className="text-sm font-medium text-primary">{video.name}</p>
                     ) : (
                       <>
-                        <p className="text-sm font-medium">Click to upload files</p>
-                        <p className="text-xs text-muted-foreground">Max file size: 10MB</p>
+                        <p className="text-sm font-medium">Click to upload video</p>
+                        <p className="text-xs text-muted-foreground">Max size: 50MB (MP4, MOV, AVI)</p>
+                      </>
+                    )}
+                  </label>
+                </div>
+              </div>
+
+              {/* Voice Note Upload (Optional) */}
+              <div className="space-y-2">
+                <Label htmlFor="voiceNote">Upload Voice Note (Optional)</Label>
+                <div className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary transition-colors">
+                  <input
+                    type="file"
+                    id="voiceNote"
+                    className="hidden"
+                    accept="audio/*"
+                    onChange={handleVoiceNoteChange}
+                  />
+                  <label htmlFor="voiceNote" className="flex flex-col items-center gap-3 cursor-pointer">
+                    <Upload className="w-10 h-10 text-muted-foreground" />
+                    {voiceNote ? (
+                      <p className="text-sm font-medium text-primary">{voiceNote.name}</p>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium">Click to upload voice note</p>
+                        <p className="text-xs text-muted-foreground">Max size: 10MB (MP3, WAV, M4A)</p>
                       </>
                     )}
                   </label>
