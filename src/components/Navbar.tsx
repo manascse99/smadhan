@@ -122,14 +122,12 @@ const Navbar = () => {
                       Dashboard
                     </Link>
                   </DropdownMenuItem>
-                  {!isAdmin && (
-                    <DropdownMenuItem asChild>
-                      <Link to="/profile" className="cursor-pointer">
-                        <User className="w-4 h-4 mr-2" />
-                        Profile
-                      </Link>
-                    </DropdownMenuItem>
-                  )}
+                  <DropdownMenuItem asChild>
+                    <Link to={isAdmin ? "/admin/profile" : "/profile"} className="cursor-pointer">
+                      <User className="w-4 h-4 mr-2" />
+                      Profile
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">
                     <LogOut className="w-4 h-4 mr-2" />
@@ -210,20 +208,18 @@ const Navbar = () => {
                     <LayoutDashboard className="w-4 h-4" />
                     Dashboard
                   </Link>
-                  {!isAdmin && (
-                    <Link
-                      to="/profile"
-                      onClick={() => setIsOpen(false)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                        isActive("/profile")
-                          ? "bg-primary text-primary-foreground"
-                          : "hover:bg-muted"
-                      }`}
-                    >
-                      <User className="w-4 h-4" />
-                      Profile
-                    </Link>
-                  )}
+                  <Link
+                    to={isAdmin ? "/admin/profile" : "/profile"}
+                    onClick={() => setIsOpen(false)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                      isActive(isAdmin ? "/admin/profile" : "/profile")
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-muted"
+                    }`}
+                  >
+                    <User className="w-4 h-4" />
+                    Profile
+                  </Link>
                 </>
               )}
               
