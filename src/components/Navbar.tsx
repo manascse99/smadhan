@@ -20,17 +20,29 @@ const Navbar = () => {
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
 
+  // Check for admin session
+  const adminSession = localStorage.getItem("admin_session");
+  const adminData = adminSession ? JSON.parse(adminSession) : null;
+  const isAdmin = !!adminData;
+  const currentUser = isAdmin ? { fullName: `${adminData.department} Admin`, role: "admin" } : user;
+  const isLoggedIn = isAuthenticated || isAdmin;
+
   const isActive = (path: string) => location.pathname === path;
 
   const handleLogout = () => {
-    logout();
-    navigate("/");
+    if (isAdmin) {
+      localStorage.removeItem("admin_session");
+      navigate("/auth");
+    } else {
+      logout();
+      navigate("/");
+    }
     setIsOpen(false);
   };
 
   const getUserInitials = () => {
-    if (!user?.fullName) return "U";
-    return user.fullName
+    if (!currentUser?.fullName) return "U";
+    return currentUser.fullName
       .split(" ")
       .map((n) => n[0])
       .join("")
@@ -74,9 +86,9 @@ const Navbar = () => {
             ))}
             
             {/* Dashboard Link */}
-            {isAuthenticated && (
+            {isLoggedIn && (
               <Button asChild variant="ghost" size="sm" className="gap-2">
-                <Link to="/dashboard">
+                <Link to={isAdmin ? "/admin/dashboard" : "/dashboard"}>
                   <LayoutDashboard className="w-4 h-4" />
                   Dashboard
                 </Link>
@@ -86,18 +98,18 @@ const Navbar = () => {
 
           {/* Desktop Auth Section */}
           <div className="hidden md:flex items-center gap-3">
-            {isAuthenticated ? (
+            {isLoggedIn ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="gap-2 h-10">
                     <Avatar className="w-8 h-8">
-                      <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white text-sm font-semibold shadow-lg">
                         {getUserInitials()}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col items-start">
-                      <span className="text-sm font-medium">{user?.fullName}</span>
-                      <RoleBadge role={user!.role} className="text-xs" />
+                      <span className="text-sm font-medium">{currentUser?.fullName}</span>
+                      <span className="text-xs text-muted-foreground">{isAdmin ? "Admin" : "Citizen"}</span>
                     </div>
                   </Button>
                 </DropdownMenuTrigger>
@@ -105,7 +117,7 @@ const Navbar = () => {
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link to="/dashboard" className="cursor-pointer">
+                    <Link to={isAdmin ? "/admin/dashboard" : "/dashboard"} className="cursor-pointer">
                       <LayoutDashboard className="w-4 h-4 mr-2" />
                       Dashboard
                     </Link>
@@ -144,17 +156,17 @@ const Navbar = () => {
           <div className="md:hidden py-4 border-t border-border animate-fade-in">
             <div className="flex flex-col gap-3">
               {/* User Info (Mobile) */}
-              {isAuthenticated && user && (
+              {isLoggedIn && currentUser && (
                 <div className="px-4 pb-3 border-b border-border">
                   <div className="flex items-center gap-3">
                     <Avatar className="w-10 h-10">
-                      <AvatarFallback className="bg-primary text-primary-foreground">
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold shadow-lg">
                         {getUserInitials()}
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-medium text-sm">{user.fullName}</p>
-                      <RoleBadge role={user.role} />
+                      <p className="font-medium text-sm">{currentUser.fullName}</p>
+                      <p className="text-xs text-muted-foreground">{isAdmin ? "Admin" : "Citizen"}</p>
                     </div>
                   </div>
                 </div>
@@ -176,12 +188,12 @@ const Navbar = () => {
               ))}
               
               {/* Dashboard Link (Mobile) */}
-              {isAuthenticated && (
+              {isLoggedIn && (
                 <Link
-                  to="/dashboard"
+                  to={isAdmin ? "/admin/dashboard" : "/dashboard"}
                   onClick={() => setIsOpen(false)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                    isActive("/dashboard")
+                    isActive(isAdmin ? "/admin/dashboard" : "/dashboard")
                       ? "bg-primary text-primary-foreground"
                       : "hover:bg-muted"
                   }`}
@@ -192,7 +204,7 @@ const Navbar = () => {
               )}
               
               <div className="flex flex-col gap-2 px-4 pt-2 border-t border-border mt-2">
-                {isAuthenticated ? (
+                {isLoggedIn ? (
                   <Button onClick={handleLogout} variant="outline" size="sm" className="w-full gap-2">
                     <LogOut className="w-4 h-4" />
                     Logout

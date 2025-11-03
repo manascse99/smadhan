@@ -118,9 +118,9 @@ const TrackComplaint = () => {
 
                 <div className="relative">
                   {/* Progress Line */}
-                  <div className="absolute top-8 left-0 right-0 h-1 bg-border overflow-hidden">
+                  <div className="absolute top-8 left-0 right-0 h-2 bg-muted/50 rounded-full overflow-hidden shadow-inner">
                     <div
-                      className="h-full progress-fill transition-[width] duration-1000 ease-out"
+                      className="h-full progress-fill transition-[width] duration-1000 ease-out rounded-full"
                       style={{ width: `${progressWidth}%` }}
                     />
                   </div>
@@ -137,11 +137,11 @@ const TrackComplaint = () => {
                           <div
                             className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 ${
                               isCompleted
-                                ? "bg-gradient-hero shadow-glow scale-110"
-                                : "bg-muted border-2 border-border"
+                                ? "bg-gradient-to-br from-green-500 to-emerald-600 shadow-[0_0_20px_rgba(16,185,129,0.8),0_0_40px_rgba(16,185,129,0.4)] scale-110"
+                                : "bg-muted/50 border-2 border-muted"
                             }`}
                           >
-                            <Icon className={`w-8 h-8 ${isCompleted ? "text-white" : "text-muted-foreground"}`} />
+                            <Icon className={`w-8 h-8 ${isCompleted ? "text-white drop-shadow-lg" : "text-muted-foreground/50"}`} />
                           </div>
                           <p
                             className={`text-sm font-medium text-center ${
