@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Upload, Sparkles, CheckCircle, Send, AlertCircle } from "lucide-react";
+import { MapPin, Upload, Sparkles, CheckCircle, Send, AlertCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -92,58 +92,81 @@ const FileComplaint = () => {
       // Simulate AI suggestion
       if (text.length > 20 && !aiSuggestion) {
         setTimeout(() => {
-          setAiSuggestion("AI Suggests: Water Supply Issue (86% confidence)");
+          setAiSuggestion("AI Suggests: This appears to be a valid complaint");
         }, 500);
       }
     }
   };
 
+  const uploadImageToCloudinary = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'ml_default'); // You may need to configure this in Cloudinary
+    
+    const response = await fetch('https://api.cloudinary.com/v1_1/dxnc59yv9/image/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    
+    const data = await response.json();
+    return data.secure_url;
+  };
+
+  const verifyImageWithML = async (imageUrl: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`https://ayushg2500-image-model.hf.space/predict?url=${encodeURIComponent(imageUrl)}`);
+      const result = await response.json();
+      
+      // Assuming the API returns { real: true/false } or similar
+      // Adjust based on actual API response structure
+      return result.real === true || result.prediction === "real" || result.fake === false;
+    } catch (error) {
+      console.error('Error verifying image:', error);
+      throw new Error('Failed to verify image authenticity');
+    }
+  };
+
   const handleVerify = async () => {
-    if (!formData.fullName || !formData.mobile || !formData.category || !formData.description) {
+    if (!formData.title || !formData.category || !formData.description) {
       toast.error("Please fill all required fields before verification");
       return;
     }
 
     if (images.length < 2) {
-      toast.error("Please upload at least 2 images");
+      toast.error("Please upload at least 2 images for verification");
       return;
     }
 
     setIsVerifying(true);
 
-    // Simulate AI verification process
-    setTimeout(() => {
-      // Check for duplicate complaints (mock check)
-      const isDuplicate = Math.random() < 0.3; // 30% chance of duplicate
-      
-      if (isDuplicate) {
-        toast.error("Similar complaint already exists in your area!", {
-          description: "Consider upvoting the existing complaint instead",
-          duration: 5000,
-        });
-        setIsVerifying(false);
-        return;
+    try {
+      toast.info("Uploading and verifying images with ML model...", { duration: 3000 });
+
+      // Upload images to Cloudinary and verify with ML model
+      for (let i = 0; i < images.length; i++) {
+        const imageUrl = await uploadImageToCloudinary(images[i]);
+        const isReal = await verifyImageWithML(imageUrl);
+        
+        if (!isReal) {
+          toast.error(`Image ${i + 1} appears to be fake or manipulated. Please upload genuine evidence.`, {
+            duration: 5000,
+          });
+          setIsVerifying(false);
+          return;
+        }
       }
 
-      // Check for fake/invalid images (mock check)
-      const isFakeImage = images.length > 0 && Math.random() < 0.2; // 20% chance if images uploaded
-      
-      if (isFakeImage) {
-        toast.error("Uploaded image appears to be invalid or fake", {
-          description: "Please upload genuine evidence",
-          duration: 5000,
-        });
-        setIsVerifying(false);
-        return;
-      }
-
-      // Verification successful
+      // All images verified successfully
       setIsVerified(true);
       setIsVerifying(false);
-      toast.success("Complaint verified successfully! You can now submit.", {
+      toast.success("All images verified successfully! You can now submit your complaint.", {
         duration: 4000,
       });
-    }, 2000);
+    } catch (error: any) {
+      console.error('Verification error:', error);
+      toast.error(error.message || "Failed to verify images. Please try again.");
+      setIsVerifying(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -225,40 +248,15 @@ const FileComplaint = () => {
           {/* Form */}
           <Card className="gradient-card shadow-xl p-8">
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Personal Details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name *</Label>
-                  <Input
-                    id="fullName"
-                    placeholder="Enter your full name"
-                    value={formData.fullName}
-                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="mobile">Mobile Number *</Label>
-                  <Input
-                    id="mobile"
-                    placeholder="9876543210"
-                    maxLength={10}
-                    value={formData.mobile}
-                    onChange={(e) => setFormData({ ...formData, mobile: e.target.value.replace(/\D/g, "") })}
-                    required
-                  />
-                </div>
-              </div>
-
+              {/* Complaint Title */}
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="title">Complaint Title *</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  id="title"
+                  placeholder="Brief title of your complaint"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  required
                 />
               </div>
 
@@ -271,9 +269,7 @@ const FileComplaint = () => {
                   </SelectTrigger>
                   <SelectContent className="bg-background">
                     {categories.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
-                      </SelectItem>
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -281,184 +277,160 @@ const FileComplaint = () => {
 
               {/* Description */}
               <div className="space-y-2">
-                <Label htmlFor="description">Complaint Description *</Label>
+                <Label htmlFor="description">Description *</Label>
                 <Textarea
                   id="description"
-                  placeholder="Describe your complaint in detail..."
-                  className="min-h-32 resize-none"
+                  placeholder="Describe your issue in detail..."
                   value={formData.description}
                   onChange={handleDescriptionChange}
+                  className="min-h-[150px] resize-none"
                   required
                 />
-                <p className="text-xs text-muted-foreground text-right">
-                  {charCount}/1000 characters
-                </p>
+                <p className="text-xs text-muted-foreground text-right">{charCount}/1000</p>
               </div>
 
               {/* Location */}
               <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
+                <Label htmlFor="location">Location *</Label>
                 <div className="relative">
-                  <MapPin className="absolute left-3 top-3 w-5 h-5 text-muted-foreground" />
+                  <MapPin className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="location"
-                    placeholder="Enter location or address"
-                    className="pl-10"
+                    placeholder="Enter location of the issue"
                     value={formData.location}
                     onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                    className="pl-10"
+                    required
                   />
                 </div>
               </div>
 
-              {/* Map Embed */}
+              {/* Image Upload */}
               <div className="space-y-2">
-                <Label>Pin Location on Map</Label>
-                <div className="w-full h-64 rounded-lg overflow-hidden border border-border">
-                  <iframe
-                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3502.1983901719867!2d77.20902931508092!3d28.613939382421935!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x390cfd371d9e7c4b%3A0x8e3f4c5cc6e4c7f3!2sIndia%20Gate!5e0!3m2!1sen!2sin!4v1629789012345!5m2!1sen!2sin"
-                    width="100%"
-                    height="100%"
-                    style={{ border: 0 }}
-                    allowFullScreen
-                    loading="lazy"
-                  />
-                </div>
-              </div>
-
-              {/* Image Upload (Required: 2-5 images) */}
-              <div className="space-y-3">
-                <Label htmlFor="images">Upload Images * (Min 2, Max 5)</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary transition-colors">
-                  <input
+                <Label>Upload Images * (Min 2, Max 5)</Label>
+                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
+                  <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Click to upload or drag and drop images
+                  </p>
+                  <Input
                     type="file"
-                    id="images"
-                    className="hidden"
                     accept="image/*"
                     multiple
                     onChange={handleImageChange}
+                    className="cursor-pointer"
                   />
-                  <label htmlFor="images" className="flex flex-col items-center gap-3 cursor-pointer">
-                    <Upload className="w-10 h-10 text-muted-foreground" />
-                    <p className="text-sm font-medium">Click to upload images</p>
-                    <p className="text-xs text-muted-foreground">Required: 2-5 images (JPG, PNG, WEBP)</p>
-                  </label>
                 </div>
                 {images.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
+                  <div className="grid grid-cols-3 gap-4 mt-4">
                     {images.map((img, idx) => (
                       <div key={idx} className="relative group">
-                        <img 
-                          src={URL.createObjectURL(img)} 
-                          alt={`Upload ${idx + 1}`}
-                          className="w-full h-32 object-cover rounded-lg border border-border"
+                        <img
+                          src={URL.createObjectURL(img)}
+                          alt={`Preview ${idx + 1}`}
+                          className="w-full h-24 object-cover rounded-lg"
                         />
                         <button
                           type="button"
                           onClick={() => removeImage(idx)}
-                          className="absolute top-1 right-1 bg-destructive text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
+                          <X className="w-4 h-4" />
                         </button>
                       </div>
                     ))}
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground">{images.length}/5 images uploaded</p>
+                <p className="text-xs text-muted-foreground">
+                  {images.length}/5 images uploaded (Minimum 2 required)
+                </p>
               </div>
 
               {/* Video Upload (Optional) */}
               <div className="space-y-2">
-                <Label htmlFor="video">Upload Video (Optional)</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary transition-colors">
-                  <input
+                <Label>Upload Video (Optional)</Label>
+                <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary transition-colors">
+                  <Input
                     type="file"
-                    id="video"
-                    className="hidden"
                     accept="video/*"
                     onChange={handleVideoChange}
+                    className="cursor-pointer"
                   />
-                  <label htmlFor="video" className="flex flex-col items-center gap-3 cursor-pointer">
-                    <Upload className="w-10 h-10 text-muted-foreground" />
-                    {video ? (
-                      <p className="text-sm font-medium text-primary">{video.name}</p>
-                    ) : (
-                      <>
-                        <p className="text-sm font-medium">Click to upload video</p>
-                        <p className="text-xs text-muted-foreground">Max size: 50MB (MP4, MOV, AVI)</p>
-                      </>
-                    )}
-                  </label>
+                  {video && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Video: {video.name}
+                    </p>
+                  )}
                 </div>
               </div>
 
               {/* Voice Note Upload (Optional) */}
               <div className="space-y-2">
-                <Label htmlFor="voiceNote">Upload Voice Note (Optional)</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary transition-colors">
-                  <input
+                <Label>Upload Voice Note (Optional)</Label>
+                <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary transition-colors">
+                  <Input
                     type="file"
-                    id="voiceNote"
-                    className="hidden"
                     accept="audio/*"
                     onChange={handleVoiceNoteChange}
+                    className="cursor-pointer"
                   />
-                  <label htmlFor="voiceNote" className="flex flex-col items-center gap-3 cursor-pointer">
-                    <Upload className="w-10 h-10 text-muted-foreground" />
-                    {voiceNote ? (
-                      <p className="text-sm font-medium text-primary">{voiceNote.name}</p>
-                    ) : (
-                      <>
-                        <p className="text-sm font-medium">Click to upload voice note</p>
-                        <p className="text-xs text-muted-foreground">Max size: 10MB (MP3, WAV, M4A)</p>
-                      </>
-                    )}
-                  </label>
+                  {voiceNote && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Voice Note: {voiceNote.name}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              {/* Verify and Submit Buttons */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Button 
-                  type="button"
-                  size="lg" 
-                  variant={isVerified ? "default" : "outline"}
-                  onClick={handleVerify}
-                  disabled={isVerifying || isVerified}
-                  className={`text-lg transition-all ${
-                    isVerified 
-                      ? "bg-secondary hover:bg-secondary/90 text-white shadow-lg shadow-secondary/50" 
-                      : ""
-                  }`}
-                >
-                  {isVerifying ? (
-                    <>
-                      <div className="w-5 h-5 mr-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                      Verifying...
-                    </>
-                  ) : isVerified ? (
-                    <>
-                      <CheckCircle className="w-5 h-5 mr-2" />
-                      Verified ✓
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="w-5 h-5 mr-2" />
-                      Verify Complaint
-                    </>
-                  )}
-                </Button>
+              {/* Submit & Verify Buttons */}
+              <div className="flex flex-col gap-4 pt-6">
+                {!isVerified ? (
+                  <Button
+                    type="button"
+                    onClick={handleVerify}
+                    disabled={isVerifying || images.length < 2 || !formData.category || !formData.description || !formData.title}
+                    className="w-full"
+                    size="lg"
+                  >
+                    {isVerifying ? (
+                      <>
+                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                        Verifying with ML Model...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        Verify Images with AI
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full bg-gradient-to-r from-primary to-primary-foreground hover:opacity-90"
+                    size="lg"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-5 h-5 mr-2" />
+                        Submit Complaint
+                      </>
+                    )}
+                  </Button>
+                )}
 
-                <Button 
-                  type="submit" 
-                  size="lg" 
-                  disabled={!isVerified}
-                  className="text-lg bg-primary hover:bg-primary-dark shadow-md"
-                >
-                  <Send className="w-5 h-5 mr-2" />
-                  Submit Complaint
-                </Button>
+                {isVerified && (
+                  <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 justify-center">
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Images verified successfully - Ready to submit</span>
+                  </div>
+                )}
               </div>
             </form>
           </Card>
@@ -466,10 +438,14 @@ const FileComplaint = () => {
       </main>
 
       <Footer />
-      
-      <ComplaintTicket 
+
+      {/* Complaint Ticket Modal */}
+      <ComplaintTicket
         open={showTicket}
-        onClose={() => setShowTicket(false)}
+        onClose={() => {
+          setShowTicket(false);
+          navigate('/dashboard');
+        }}
         complaintId={complaintId}
         resolutionTime={resolutionTime}
       />

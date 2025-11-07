@@ -106,16 +106,62 @@ const ComplaintFeed = () => {
     }
   };
 
-  const handleUpvote = (id: string) => {
-    setComplaints(
-      complaints.map((c) => (c.id === id ? { ...c, upvotes: c.upvotes + 1 } : c))
-    );
-    toast.success("Upvoted successfully!");
+  const handleUpvote = async (id: string) => {
+    if (!user) {
+      toast.error("Please login to upvote");
+      return;
+    }
+
+    try {
+      const complaint = complaints.find(c => c.id === id);
+      if (!complaint) return;
+
+      if (complaint.hasUpvoted) {
+        // Remove upvote
+        const { error } = await supabase
+          .from('complaint_upvotes')
+          .delete()
+          .eq('complaint_id', id)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+
+        // Update local state
+        setComplaints(complaints.map((c) => 
+          c.id === id ? { ...c, upvotes: c.upvotes - 1, hasUpvoted: false } : c
+        ));
+        toast.success("Upvote removed");
+      } else {
+        // Add upvote
+        const { error } = await supabase
+          .from('complaint_upvotes')
+          .insert({ complaint_id: id, user_id: user.id });
+
+        if (error) throw error;
+
+        // Update complaint upvote count
+        const { error: updateError } = await supabase
+          .from('complaints')
+          .update({ upvotes: complaint.upvotes + 1 })
+          .eq('id', id);
+
+        if (updateError) throw updateError;
+
+        // Update local state
+        setComplaints(complaints.map((c) => 
+          c.id === id ? { ...c, upvotes: c.upvotes + 1, hasUpvoted: true } : c
+        ));
+        toast.success("Upvoted successfully!");
+      }
+    } catch (error: any) {
+      console.error('Error upvoting:', error);
+      toast.error("Failed to upvote");
+    }
   };
 
   const sortedComplaints = [...complaints].sort((a, b) => {
     if (sortBy === "newest") {
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     } else {
       return b.upvotes - a.upvotes;
     }
@@ -175,7 +221,17 @@ const ComplaintFeed = () => {
         </Card>
 
         {/* Complaints Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
+            <p className="mt-4 text-muted-foreground">Loading complaints...</p>
+          </div>
+        ) : filteredComplaints.length === 0 ? (
+          <Card className="p-12 text-center">
+            <p className="text-muted-foreground">No complaints found. Be the first to file one!</p>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
           {filteredComplaints.map((complaint) => (
             <Card
               key={complaint.id}
@@ -188,7 +244,7 @@ const ComplaintFeed = () => {
                     <h3 className="text-xl font-bold mb-2">{complaint.title}</h3>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Calendar className="w-4 h-4" />
-                      <span>{complaint.date}</span>
+                      <span>{new Date(complaint.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                     </div>
                   </div>
                   <span className={`status-badge ${getStatusColor(complaint.status)}`}>
@@ -205,22 +261,22 @@ const ComplaintFeed = () => {
                 <div className="flex items-center gap-4 text-sm">
                   <div className="flex items-center gap-1.5 text-muted-foreground">
                     <MapPin className="w-4 h-4" />
-                    <span>{complaint.location}</span>
+                    <span>{complaint.location_address}</span>
                   </div>
                 </div>
 
                 {/* Actions */}
                 <div className="flex items-center justify-between pt-4 border-t border-border">
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleUpvote(complaint.id)}
-                      className="hover:bg-secondary hover:text-secondary-foreground"
-                    >
-                      <ThumbsUp className="w-4 h-4 mr-2" />
-                      {complaint.upvotes}
-                    </Button>
+                  <Button
+                    variant={complaint.hasUpvoted ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleUpvote(complaint.id)}
+                    className="hover:bg-secondary hover:text-secondary-foreground"
+                  >
+                    <ThumbsUp className={`w-4 h-4 mr-2 ${complaint.hasUpvoted ? 'fill-current' : ''}`} />
+                    {complaint.upvotes}
+                  </Button>
                   </div>
                   <Button variant="ghost" size="sm">
                     <Eye className="w-4 h-4 mr-2" />
@@ -231,6 +287,7 @@ const ComplaintFeed = () => {
             </Card>
           ))}
         </div>
+        )}
 
         {/* Nearby Complaints Section */}
         <Card className="gradient-card shadow-lg p-8">
@@ -245,9 +302,9 @@ const ComplaintFeed = () => {
                 className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
               >
                 <p className="font-medium mb-2">{complaint.title}</p>
-                <p className="text-xs text-muted-foreground mb-3">{complaint.location}</p>
+                <p className="text-xs text-muted-foreground mb-3">{complaint.location_address}</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">{complaint.date}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(complaint.created_at).toLocaleDateString('en-IN')}</span>
                   <div className="flex items-center gap-1 text-xs">
                     <ThumbsUp className="w-3 h-3" />
                     <span>{complaint.upvotes}</span>

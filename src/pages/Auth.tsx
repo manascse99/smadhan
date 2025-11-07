@@ -49,31 +49,13 @@ const Auth = () => {
       return;
     }
 
-    if (signinData.loginAs === "admin" && !signinData.department) {
-      toast.error("Please select your department");
-      return;
-    }
-
     try {
-      if (signinData.loginAs === "admin") {
-        // Admin login - store in localStorage
-        const adminData = {
-          email: signinData.email,
-          department: signinData.department,
-          role: "admin",
-          loginTime: new Date().toISOString(),
-        };
-        localStorage.setItem("admin_session", JSON.stringify(adminData));
-        toast.success(`Welcome, ${signinData.department} Admin!`);
-        navigate("/admin/dashboard");
-      } else {
-        // Citizen login - use auth context
-        await login(signinData.email, signinData.password);
-        toast.success("Welcome back!");
-        navigate("/dashboard");
-      }
-    } catch (error) {
-      toast.error("Invalid credentials");
+      await login(signinData.email, signinData.password);
+      toast.success("Welcome back!");
+      navigate("/dashboard");
+    } catch (error: any) {
+      console.error('Login error:', error);
+      toast.error(error.message || "Invalid credentials");
     }
   };
 
@@ -97,17 +79,13 @@ const Auth = () => {
 
     try {
       const fullName = `${signupData.firstName} ${signupData.lastName}`;
-      await signup(signupData.email, signupData.password, fullName, signupData.role, signupData.department);
+      await signup(signupData.email, signupData.password, fullName, UserRole.CITIZEN);
       
-      if (signupData.role === UserRole.OFFICER) {
-        toast.success("Registration submitted! Waiting for admin approval.");
-        navigate("/");
-      } else {
-        toast.success("Account created successfully!");
-        navigate("/dashboard");
-      }
-    } catch (error) {
-      toast.error("Registration failed");
+      toast.success("Account created successfully! Please log in.");
+      setActiveTab("signin");
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      toast.error(error.message || "Registration failed. Email may already be in use.");
     }
   };
 
@@ -187,54 +165,6 @@ const Auth = () => {
             </div>
 
             <form onSubmit={handleSignin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="login-as">Login As</Label>
-                <Select 
-                  value={signinData.loginAs} 
-                  onValueChange={(value) => setSigninData({ ...signinData, loginAs: value as "citizen" | "admin", department: "" })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select login type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="citizen">
-                      <div className="flex items-center gap-2">
-                        <UserIcon className="w-4 h-4" />
-                        Citizen
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="admin">
-                      <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                        Department Admin
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {signinData.loginAs === "admin" && (
-                <div className="space-y-2">
-                  <Label htmlFor="signin-department">Department</Label>
-                  <Select value={signinData.department} onValueChange={(value) => setSigninData({ ...signinData, department: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select your department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Water Supply">Water Supply</SelectItem>
-                      <SelectItem value="Electricity">Electricity</SelectItem>
-                      <SelectItem value="Road & Transport">Road & Transport</SelectItem>
-                      <SelectItem value="Waste Management">Waste Management</SelectItem>
-                      <SelectItem value="Public Health">Public Health</SelectItem>
-                      <SelectItem value="Street Lighting">Street Lighting</SelectItem>
-                      <SelectItem value="Parks & Recreation">Parks & Recreation</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
               <div className="space-y-2">
                 <Label htmlFor="signin-email">Email</Label>
                 <div className="relative">
@@ -372,42 +302,6 @@ const Auth = () => {
                   />
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="role">Register As</Label>
-                <Select value={signupData.role} onValueChange={(value) => setSignupData({ ...signupData, role: value as UserRole })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={UserRole.CITIZEN}>Citizen</SelectItem>
-                    <SelectItem value={UserRole.OFFICER}>Department Officer</SelectItem>
-                  </SelectContent>
-                </Select>
-                {signupData.role === UserRole.OFFICER && (
-                  <p className="text-xs text-muted-foreground">
-                    Officer accounts require admin approval before activation.
-                  </p>
-                )}
-              </div>
-
-              {signupData.role === UserRole.OFFICER && (
-                <div className="space-y-2">
-                  <Label htmlFor="department">Department</Label>
-                  <Select value={signupData.department} onValueChange={(value) => setSignupData({ ...signupData, department: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="water">Water Supply</SelectItem>
-                      <SelectItem value="roads">Roads & Infrastructure</SelectItem>
-                      <SelectItem value="sanitation">Sanitation</SelectItem>
-                      <SelectItem value="electricity">Electricity</SelectItem>
-                      <SelectItem value="health">Health Services</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
 
               <div className="space-y-2">
                 <Label htmlFor="signup-password">Password</Label>
