@@ -1,8 +1,11 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, UserRole } from '@/types/roles';
+import { supabase } from '@/integrations/supabase/client';
+import { Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, fullName: string, role: UserRole, department?: string) => Promise<void>;
   logout: () => void;
@@ -13,58 +16,88 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
-    // Check for stored user on mount
-    const storedUser = localStorage.getItem('loksamadhan_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
+    // Set up auth state listener first
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        
+        if (session?.user) {
+          // Fetch user profile and role
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+          
+          const { data: roleData } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', session.user.id)
+            .single();
+          
+          if (profile && roleData) {
+            setUser({
+              id: profile.id,
+              email: profile.email,
+              fullName: profile.full_name,
+              role: roleData.role as UserRole,
+              department: profile.department || undefined,
+              isApproved: true,
+            });
+          }
+        } else {
+          setUser(null);
+        }
+      }
+    );
+
+    // Then check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = async (email: string, password: string) => {
-    // Mock login - in production this would call an API
-    const mockUser: User = {
-      id: '1',
+    const { error } = await supabase.auth.signInWithPassword({
       email,
-      fullName: 'Test User',
-      role: UserRole.CITIZEN,
-      isApproved: true,
-    };
+      password,
+    });
     
-    setUser(mockUser);
-    localStorage.setItem('loksamadhan_user', JSON.stringify(mockUser));
+    if (error) throw error;
   };
 
   const signup = async (email: string, password: string, fullName: string, role: UserRole, department?: string) => {
-    // Mock signup
-    const newUser: User = {
-      id: Date.now().toString(),
+    const redirectUrl = `${window.location.origin}/`;
+    
+    const { error } = await supabase.auth.signUp({
       email,
-      fullName,
-      role,
-      department,
-      isApproved: role === UserRole.CITIZEN, // Citizens are auto-approved, officers need admin approval
-    };
-
-    if (role === UserRole.OFFICER) {
-      // Store pending officer for admin approval
-      const pendingOfficers = JSON.parse(localStorage.getItem('pending_officers') || '[]');
-      pendingOfficers.push(newUser);
-      localStorage.setItem('pending_officers', JSON.stringify(pendingOfficers));
-    } else {
-      setUser(newUser);
-      localStorage.setItem('loksamadhan_user', JSON.stringify(newUser));
-    }
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          full_name: fullName,
+          role,
+          department,
+        }
+      }
+    });
+    
+    if (error) throw error;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('loksamadhan_user');
+    setSession(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, session, login, signup, logout, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

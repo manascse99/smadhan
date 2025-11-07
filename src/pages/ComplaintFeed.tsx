@@ -1,89 +1,95 @@
-import { useState } from "react";
-import { MapPin, ThumbsUp, Eye, TrendingUp, Calendar } from "lucide-react";
+import { useState, useEffect } from "react";
+import { MapPin, ThumbsUp, Eye, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 interface Complaint {
   id: string;
   title: string;
-  category: string;
-  location: string;
-  status: "Filed" | "Verified" | "Processing" | "Resolved";
-  upvotes: number;
-  date: string;
   description: string;
+  category: string;
+  location_address: string;
+  status: "filed" | "verified" | "processing" | "resolved";
+  upvotes: number;
+  created_at: string;
+  user_id: string;
+  hasUpvoted?: boolean;
 }
 
 const ComplaintFeed = () => {
+  const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const [sortBy, setSortBy] = useState("newest");
   const [filterDept, setFilterDept] = useState("all");
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [complaints, setComplaints] = useState<Complaint[]>([
-    {
-      id: "LOK12345",
-      title: "Water Supply Disruption",
-      category: "Water Supply",
-      location: "Sector 15, Delhi",
-      status: "Processing",
-      upvotes: 42,
-      date: "20 Dec 2024",
-      description: "Frequent water supply disruption affecting 200+ households in residential area.",
-    },
-    {
-      id: "LOK12344",
-      title: "Damaged Road Causing Accidents",
-      category: "Road & Transport",
-      location: "MG Road, Bangalore",
-      status: "Verified",
-      upvotes: 128,
-      date: "19 Dec 2024",
-      description: "Large pothole causing frequent accidents and traffic jams during peak hours.",
-    },
-    {
-      id: "LOK12343",
-      title: "Power Outage in Industrial Area",
-      category: "Electricity",
-      location: "Phase 2, Noida",
-      status: "Resolved",
-      upvotes: 89,
-      date: "18 Dec 2024",
-      description: "Prolonged power cuts affecting businesses and manufacturing units in industrial zone.",
-    },
-    {
-      id: "LOK12342",
-      title: "Garbage Not Collected for 10 Days",
-      category: "Waste Management",
-      location: "Koramangala, Bangalore",
-      status: "Filed",
-      upvotes: 67,
-      date: "17 Dec 2024",
-      description: "Waste accumulation causing health hazards and foul smell in residential colony.",
-    },
-    {
-      id: "LOK12341",
-      title: "Street Lights Not Working",
-      category: "Electricity",
-      location: "Connaught Place, Delhi",
-      status: "Processing",
-      upvotes: 54,
-      date: "16 Dec 2024",
-      description: "Multiple street lights not functional for over 2 weeks, causing safety concerns.",
-    },
-    {
-      id: "LOK12340",
-      title: "Hospital Staff Shortage",
-      category: "Public Health",
-      location: "Government Hospital, Mumbai",
-      status: "Verified",
-      upvotes: 203,
-      date: "15 Dec 2024",
-      description: "Severe shortage of doctors and nurses leading to long waiting times for patients.",
-    },
-  ]);
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/auth');
+    }
+  }, [isAuthenticated, navigate]);
+
+  // Fetch complaints
+  useEffect(() => {
+    const fetchComplaints = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('complaints')
+          .select(`
+            *,
+            complaint_upvotes!left(user_id)
+          `)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const complaintsWithUpvotes = data?.map((complaint: any) => ({
+          ...complaint,
+          hasUpvoted: complaint.complaint_upvotes?.some((upvote: any) => upvote.user_id === user?.id) || false,
+        })) || [];
+
+        setComplaints(complaintsWithUpvotes);
+      } catch (error: any) {
+        console.error('Error fetching complaints:', error);
+        toast.error("Failed to load complaints");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isAuthenticated && user) {
+      fetchComplaints();
+    }
+
+    // Subscribe to realtime updates
+    const channel = supabase
+      .channel('complaints-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'complaints'
+        },
+        () => {
+          fetchComplaints();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAuthenticated, user]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

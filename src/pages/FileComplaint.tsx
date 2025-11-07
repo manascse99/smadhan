@@ -11,13 +11,14 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { ComplaintTicket } from "@/components/ComplaintTicket";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const FileComplaint = () => {
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
-    fullName: "",
-    mobile: "",
-    email: "",
+    title: "",
     category: "",
     description: "",
     location: "",
@@ -32,17 +33,24 @@ const FileComplaint = () => {
   const [showTicket, setShowTicket] = useState(false);
   const [complaintId, setComplaintId] = useState("");
   const [resolutionTime, setResolutionTime] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const categories = [
     "Water Supply",
     "Road & Transport",
     "Electricity",
     "Waste Management",
-    "Public Health",
+    "Public Safety",
+    "Healthcare",
     "Education",
-    "Law & Order",
-    "Corruption",
+    "Other",
   ];
+
+  // Redirect if not authenticated
+  if (!isAuthenticated) {
+    navigate('/auth');
+    return null;
+  }
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -138,7 +146,7 @@ const FileComplaint = () => {
     }, 2000);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!isVerified) {
@@ -146,22 +154,48 @@ const FileComplaint = () => {
       return;
     }
 
-    const newComplaintId = `LOK${Math.floor(Math.random() * 100000).toString().padStart(5, "0")}`;
-    const date = new Date().toLocaleDateString("en-IN");
-    
-    // Calculate resolution time (7-14 days based on category)
-    const resolutionDays = Math.floor(Math.random() * 8) + 7;
-    const resolutionDate = new Date();
-    resolutionDate.setDate(resolutionDate.getDate() + resolutionDays);
-    const resolution = `${resolutionDays} days (by ${resolutionDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})`;
+    if (!user) {
+      toast.error("Please login to submit a complaint");
+      navigate('/auth');
+      return;
+    }
 
-    // Store in localStorage
-    localStorage.setItem("lastComplaintId", newComplaintId);
-    localStorage.setItem("lastComplaintDate", date);
+    setIsSubmitting(true);
 
-    setComplaintId(newComplaintId);
-    setResolutionTime(resolution);
-    setShowTicket(true);
+    try {
+      // TODO: Upload files to Supabase Storage if needed
+      // For now, we'll store complaints without file URLs
+      
+      const { data, error } = await supabase
+        .from('complaints')
+        .insert([{
+          user_id: user.id,
+          title: formData.title,
+          description: formData.description,
+          category: formData.category as any,
+          location_address: formData.location,
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const resolutionDays = Math.floor(Math.random() * 8) + 7;
+      const resolutionDate = new Date();
+      resolutionDate.setDate(resolutionDate.getDate() + resolutionDays);
+      const resolution = `${resolutionDays} days (by ${resolutionDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})`;
+
+      setComplaintId(data.id);
+      setResolutionTime(resolution);
+      setShowTicket(true);
+      
+      toast.success("Complaint submitted successfully!");
+    } catch (error: any) {
+      console.error('Error submitting complaint:', error);
+      toast.error(error.message || "Failed to submit complaint");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
