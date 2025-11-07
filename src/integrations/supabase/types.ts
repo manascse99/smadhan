@@ -14,16 +14,247 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      complaint_updates: {
+        Row: {
+          admin_id: string
+          complaint_id: string
+          created_at: string
+          id: string
+          proof_url: string | null
+          remarks: string
+          status: Database["public"]["Enums"]["complaint_status"]
+        }
+        Insert: {
+          admin_id: string
+          complaint_id: string
+          created_at?: string
+          id?: string
+          proof_url?: string | null
+          remarks: string
+          status: Database["public"]["Enums"]["complaint_status"]
+        }
+        Update: {
+          admin_id?: string
+          complaint_id?: string
+          created_at?: string
+          id?: string
+          proof_url?: string | null
+          remarks?: string
+          status?: Database["public"]["Enums"]["complaint_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complaint_updates_complaint_id_fkey"
+            columns: ["complaint_id"]
+            isOneToOne: false
+            referencedRelation: "complaints"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      complaint_upvotes: {
+        Row: {
+          complaint_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          complaint_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          complaint_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complaint_upvotes_complaint_id_fkey"
+            columns: ["complaint_id"]
+            isOneToOne: false
+            referencedRelation: "complaints"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      complaints: {
+        Row: {
+          assigned_to: string | null
+          category: Database["public"]["Enums"]["complaint_category"]
+          created_at: string
+          department_id: string | null
+          description: string
+          id: string
+          image_urls: string[] | null
+          location_address: string
+          location_lat: number | null
+          location_lng: number | null
+          resolution_date: string | null
+          satisfaction_rating: number | null
+          status: Database["public"]["Enums"]["complaint_status"]
+          title: string
+          updated_at: string
+          upvotes: number
+          user_id: string
+          video_url: string | null
+          voice_note_url: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          category: Database["public"]["Enums"]["complaint_category"]
+          created_at?: string
+          department_id?: string | null
+          description: string
+          id?: string
+          image_urls?: string[] | null
+          location_address: string
+          location_lat?: number | null
+          location_lng?: number | null
+          resolution_date?: string | null
+          satisfaction_rating?: number | null
+          status?: Database["public"]["Enums"]["complaint_status"]
+          title: string
+          updated_at?: string
+          upvotes?: number
+          user_id: string
+          video_url?: string | null
+          voice_note_url?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          category?: Database["public"]["Enums"]["complaint_category"]
+          created_at?: string
+          department_id?: string | null
+          description?: string
+          id?: string
+          image_urls?: string[] | null
+          location_address?: string
+          location_lat?: number | null
+          location_lng?: number | null
+          resolution_date?: string | null
+          satisfaction_rating?: number | null
+          status?: Database["public"]["Enums"]["complaint_status"]
+          title?: string
+          updated_at?: string
+          upvotes?: number
+          user_id?: string
+          video_url?: string | null
+          voice_note_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complaints_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      departments: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          department: string | null
+          email: string
+          full_name: string
+          id: string
+          position: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          department?: string | null
+          email: string
+          full_name: string
+          id: string
+          position?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          department?: string | null
+          email?: string
+          full_name?: string
+          id?: string
+          position?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "citizen" | "officer" | "admin" | "government"
+      complaint_category:
+        | "Water Supply"
+        | "Road & Transport"
+        | "Electricity"
+        | "Waste Management"
+        | "Public Safety"
+        | "Healthcare"
+        | "Education"
+        | "Other"
+      complaint_status: "filed" | "verified" | "processing" | "resolved"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +381,19 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["citizen", "officer", "admin", "government"],
+      complaint_category: [
+        "Water Supply",
+        "Road & Transport",
+        "Electricity",
+        "Waste Management",
+        "Public Safety",
+        "Healthcare",
+        "Education",
+        "Other",
+      ],
+      complaint_status: ["filed", "verified", "processing", "resolved"],
+    },
   },
 } as const
