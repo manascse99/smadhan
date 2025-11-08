@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Upload, Sparkles, CheckCircle, Send, AlertCircle, X } from "lucide-react";
+import { MapPin, Upload, Send, X, User, Mail, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,18 +18,16 @@ const FileComplaint = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
+    fullName: "",
+    mobile: "",
+    email: "",
     title: "",
     category: "",
     description: "",
     location: "",
   });
   const [images, setImages] = useState<File[]>([]);
-  const [video, setVideo] = useState<File | null>(null);
-  const [voiceNote, setVoiceNote] = useState<File | null>(null);
-  const [aiSuggestion, setAiSuggestion] = useState("");
   const [charCount, setCharCount] = useState(0);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [isVerified, setIsVerified] = useState(false);
   const [showTicket, setShowTicket] = useState(false);
   const [complaintId, setComplaintId] = useState("");
   const [resolutionTime, setResolutionTime] = useState("");
@@ -62,22 +60,6 @@ const FileComplaint = () => {
     toast.success(`${files.length} image(s) uploaded`);
   };
 
-  const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setVideo(file);
-      toast.success("Video uploaded successfully");
-    }
-  };
-
-  const handleVoiceNoteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setVoiceNote(file);
-      toast.success("Voice note uploaded successfully");
-    }
-  };
-
   const removeImage = (index: number) => {
     setImages(images.filter((_, i) => i !== index));
     toast.success("Image removed");
@@ -88,92 +70,28 @@ const FileComplaint = () => {
     if (text.length <= 1000) {
       setFormData({ ...formData, description: text });
       setCharCount(text.length);
-
-      // Simulate AI suggestion
-      if (text.length > 20 && !aiSuggestion) {
-        setTimeout(() => {
-          setAiSuggestion("AI Suggests: This appears to be a valid complaint");
-        }, 500);
-      }
-    }
-  };
-
-  const uploadImageToCloudinary = async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', 'ml_default'); // You may need to configure this in Cloudinary
-    
-    const response = await fetch('https://api.cloudinary.com/v1_1/dxnc59yv9/image/upload', {
-      method: 'POST',
-      body: formData,
-    });
-    
-    const data = await response.json();
-    return data.secure_url;
-  };
-
-  const verifyImageWithML = async (imageUrl: string): Promise<boolean> => {
-    try {
-      const response = await fetch(`https://ayushg2500-image-model.hf.space/predict?url=${encodeURIComponent(imageUrl)}`);
-      const result = await response.json();
-      
-      // Assuming the API returns { real: true/false } or similar
-      // Adjust based on actual API response structure
-      return result.real === true || result.prediction === "real" || result.fake === false;
-    } catch (error) {
-      console.error('Error verifying image:', error);
-      throw new Error('Failed to verify image authenticity');
-    }
-  };
-
-  const handleVerify = async () => {
-    if (!formData.title || !formData.category || !formData.description) {
-      toast.error("Please fill all required fields before verification");
-      return;
-    }
-
-    if (images.length < 2) {
-      toast.error("Please upload at least 2 images for verification");
-      return;
-    }
-
-    setIsVerifying(true);
-
-    try {
-      toast.info("Uploading and verifying images with ML model...", { duration: 3000 });
-
-      // Upload images to Cloudinary and verify with ML model
-      for (let i = 0; i < images.length; i++) {
-        const imageUrl = await uploadImageToCloudinary(images[i]);
-        const isReal = await verifyImageWithML(imageUrl);
-        
-        if (!isReal) {
-          toast.error(`Image ${i + 1} appears to be fake or manipulated. Please upload genuine evidence.`, {
-            duration: 5000,
-          });
-          setIsVerifying(false);
-          return;
-        }
-      }
-
-      // All images verified successfully
-      setIsVerified(true);
-      setIsVerifying(false);
-      toast.success("All images verified successfully! You can now submit your complaint.", {
-        duration: 4000,
-      });
-    } catch (error: any) {
-      console.error('Verification error:', error);
-      toast.error(error.message || "Failed to verify images. Please try again.");
-      setIsVerifying(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!isVerified) {
-      toast.error("Please verify your complaint first");
+
+    // Validate form
+    if (!formData.fullName || !formData.mobile || !formData.email || 
+        !formData.title || !formData.category || !formData.description || !formData.location) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+
+    // Validate mobile number
+    if (!/^\d{10}$/.test(formData.mobile)) {
+      toast.error("Please enter a valid 10-digit mobile number");
+      return;
+    }
+
+    // Validate email
+    if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      toast.error("Please enter a valid email address");
       return;
     }
 
@@ -186,15 +104,13 @@ const FileComplaint = () => {
     setIsSubmitting(true);
 
     try {
-      // TODO: Upload files to Supabase Storage if needed
-      // For now, we'll store complaints without file URLs
-      
+      // Insert complaint into database
       const { data, error } = await supabase
         .from('complaints')
         .insert([{
           user_id: user.id,
           title: formData.title,
-          description: formData.description,
+          description: `Contact: ${formData.fullName} | Phone: ${formData.mobile} | Email: ${formData.email}\n\n${formData.description}`,
           category: formData.category as any,
           location_address: formData.location,
         }])
@@ -203,6 +119,7 @@ const FileComplaint = () => {
 
       if (error) throw error;
 
+      // Calculate estimated resolution time
       const resolutionDays = Math.floor(Math.random() * 8) + 7;
       const resolutionDate = new Date();
       resolutionDate.setDate(resolutionDate.getDate() + resolutionDays);
@@ -213,6 +130,19 @@ const FileComplaint = () => {
       setShowTicket(true);
       
       toast.success("Complaint submitted successfully!");
+      
+      // Reset form
+      setFormData({
+        fullName: "",
+        mobile: "",
+        email: "",
+        title: "",
+        category: "",
+        description: "",
+        location: "",
+      });
+      setImages([]);
+      setCharCount(0);
     } catch (error: any) {
       console.error('Error submitting complaint:', error);
       toast.error(error.message || "Failed to submit complaint");
@@ -235,29 +165,79 @@ const FileComplaint = () => {
             </p>
           </div>
 
-          {/* AI Suggestion Banner */}
-          {aiSuggestion && (
-            <Card className="mb-6 p-4 bg-secondary/10 border-secondary/30 animate-fade-in">
-              <div className="flex items-center gap-3">
-                <Sparkles className="w-5 h-5 text-secondary animate-pulse-slow" />
-                <p className="text-sm font-medium text-secondary">{aiSuggestion}</p>
-              </div>
-            </Card>
-          )}
-
           {/* Form */}
           <Card className="gradient-card shadow-xl p-8">
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Complaint Title */}
-              <div className="space-y-2">
-                <Label htmlFor="title">Complaint Title *</Label>
-                <Input
-                  id="title"
-                  placeholder="Brief title of your complaint"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  required
-                />
+              {/* Personal Details Section */}
+              <div className="space-y-6 pb-6 border-b border-border">
+                <h2 className="text-xl font-semibold">Personal Details</h2>
+                
+                {/* Full Name */}
+                <div className="space-y-2">
+                  <Label htmlFor="fullName">Full Name *</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="fullName"
+                      placeholder="Enter your full name"
+                      value={formData.fullName}
+                      onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                      className="pl-10"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Mobile Number */}
+                <div className="space-y-2">
+                  <Label htmlFor="mobile">Mobile Number *</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="mobile"
+                      placeholder="Enter 10-digit mobile number"
+                      value={formData.mobile}
+                      onChange={(e) => setFormData({ ...formData, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                      className="pl-10"
+                      maxLength={10}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Email */}
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address *</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="Enter your email address"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="pl-10"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Complaint Details Section */}
+              <div className="space-y-6 pt-2">
+                <h2 className="text-xl font-semibold">Complaint Details</h2>
+
+                {/* Complaint Title */}
+                <div className="space-y-2">
+                  <Label htmlFor="title">Complaint Title *</Label>
+                  <Input
+                    id="title"
+                    placeholder="Brief title of your complaint"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    required
+                  />
+                </div>
               </div>
 
               {/* Category */}
@@ -305,13 +285,13 @@ const FileComplaint = () => {
                 </div>
               </div>
 
-              {/* Image Upload */}
+              {/* Image Upload (Optional) */}
               <div className="space-y-2">
-                <Label>Upload Images * (Min 2, Max 5)</Label>
+                <Label>Upload Images (Optional - Max 5)</Label>
                 <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
                   <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground mb-2">
-                    Click to upload or drag and drop images
+                    Click to upload or drag and drop supporting images
                   </p>
                   <Input
                     type="file"
@@ -342,95 +322,33 @@ const FileComplaint = () => {
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  {images.length}/5 images uploaded (Minimum 2 required)
+                  {images.length}/5 images uploaded
                 </p>
               </div>
 
-              {/* Video Upload (Optional) */}
-              <div className="space-y-2">
-                <Label>Upload Video (Optional)</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary transition-colors">
-                  <Input
-                    type="file"
-                    accept="video/*"
-                    onChange={handleVideoChange}
-                    className="cursor-pointer"
-                  />
-                  {video && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Video: {video.name}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Voice Note Upload (Optional) */}
-              <div className="space-y-2">
-                <Label>Upload Voice Note (Optional)</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary transition-colors">
-                  <Input
-                    type="file"
-                    accept="audio/*"
-                    onChange={handleVoiceNoteChange}
-                    className="cursor-pointer"
-                  />
-                  {voiceNote && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Voice Note: {voiceNote.name}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Submit & Verify Buttons */}
+              {/* Submit Button */}
               <div className="flex flex-col gap-4 pt-6">
-                {!isVerified ? (
-                  <Button
-                    type="button"
-                    onClick={handleVerify}
-                    disabled={isVerifying || images.length < 2 || !formData.category || !formData.description || !formData.title}
-                    className="w-full"
-                    size="lg"
-                  >
-                    {isVerifying ? (
-                      <>
-                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
-                        Verifying with ML Model...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="w-5 h-5 mr-2" />
-                        Verify Images with AI
-                      </>
-                    )}
-                  </Button>
-                ) : (
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full bg-gradient-to-r from-primary to-primary-foreground hover:opacity-90"
-                    size="lg"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
-                        Submitting...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-5 h-5 mr-2" />
-                        Submit Complaint
-                      </>
-                    )}
-                  </Button>
-                )}
-
-                {isVerified && (
-                  <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 justify-center">
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Images verified successfully - Ready to submit</span>
-                  </div>
-                )}
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90"
+                  size="lg"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                      Submitting Complaint...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-5 h-5 mr-2" />
+                      Submit Complaint
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-center text-muted-foreground">
+                  Your complaint will be automatically assigned to the relevant department
+                </p>
               </div>
             </form>
           </Card>
