@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card } from "@/components/ui/card";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { ComplaintTicket } from "@/components/ComplaintTicket";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,9 +27,6 @@ const FileComplaint = () => {
   });
   const [images, setImages] = useState<File[]>([]);
   const [charCount, setCharCount] = useState(0);
-  const [showTicket, setShowTicket] = useState(false);
-  const [complaintId, setComplaintId] = useState("");
-  const [resolutionTime, setResolutionTime] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const categories = [
@@ -119,30 +115,10 @@ const FileComplaint = () => {
 
       if (error) throw error;
 
-      // Calculate estimated resolution time
-      const resolutionDays = Math.floor(Math.random() * 8) + 7;
-      const resolutionDate = new Date();
-      resolutionDate.setDate(resolutionDate.getDate() + resolutionDays);
-      const resolution = `${resolutionDays} days (by ${resolutionDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})`;
-
-      setComplaintId(data.id);
-      setResolutionTime(resolution);
-      setShowTicket(true);
+      toast.success(`Complaint submitted successfully! ID: ${data.id}`);
       
-      toast.success("Complaint submitted successfully!");
-      
-      // Reset form
-      setFormData({
-        fullName: "",
-        mobile: "",
-        email: "",
-        title: "",
-        category: "",
-        description: "",
-        location: "",
-      });
-      setImages([]);
-      setCharCount(0);
+      // Navigate immediately to dashboard
+      navigate('/dashboard');
     } catch (error: any) {
       console.error('Error submitting complaint:', error);
       toast.error(error.message || "Failed to submit complaint");
@@ -356,17 +332,6 @@ const FileComplaint = () => {
       </main>
 
       <Footer />
-
-      {/* Complaint Ticket Modal */}
-      <ComplaintTicket
-        open={showTicket}
-        onClose={() => {
-          setShowTicket(false);
-          navigate('/dashboard');
-        }}
-        complaintId={complaintId}
-        resolutionTime={resolutionTime}
-      />
     </div>
   );
 };

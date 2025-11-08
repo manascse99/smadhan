@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Scale, Mail, Lock, Eye, EyeOff, User as UserIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { UserRole } from "@/types/roles";
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { login, signup, user } = useAuth();
+  const { login, signup, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<"signin" | "signup">("signin");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -37,10 +37,11 @@ const Auth = () => {
   });
 
   // Redirect if already logged in
-  if (user) {
-    navigate("/dashboard");
-    return null;
-  }
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/dashboard");
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSignin = async (e: React.FormEvent) => {
     e.preventDefault();
