@@ -19,6 +19,7 @@ const Auth = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   
   const [signinData, setSigninData] = useState({ 
     email: "", 
@@ -49,13 +50,23 @@ const Auth = () => {
       return;
     }
 
+    setIsLoading(true);
     try {
       await login(signinData.email, signinData.password);
       toast.success("Welcome back!");
-      navigate("/dashboard");
+      setTimeout(() => navigate("/dashboard"), 500);
     } catch (error: any) {
       console.error('Login error:', error);
-      toast.error(error.message || "Invalid credentials");
+      setSigninData({ ...signinData, password: "" });
+      if (error.message?.includes("Invalid login credentials")) {
+        toast.error("Invalid email or password. Please try again.");
+      } else if (error.message?.includes("Email not confirmed")) {
+        toast.error("Please verify your email address before signing in.");
+      } else {
+        toast.error(error.message || "Unable to sign in. Please try again.");
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -77,15 +88,38 @@ const Auth = () => {
       return;
     }
 
+    setIsLoading(true);
     try {
       const fullName = `${signupData.firstName} ${signupData.lastName}`;
       await signup(signupData.email, signupData.password, fullName, UserRole.CITIZEN);
       
-      toast.success("Account created successfully! Please log in.");
-      setActiveTab("signin");
+      toast.success("Account created successfully! Signing you in...");
+      
+      // Auto-login after successful signup
+      setTimeout(async () => {
+        try {
+          await login(signupData.email, signupData.password);
+          toast.success("Welcome to Lok Samadhan!");
+          setTimeout(() => navigate("/dashboard"), 500);
+        } catch (loginError: any) {
+          console.error('Auto-login error:', loginError);
+          setIsLoading(false);
+          toast.info("Please sign in with your new account");
+          setSigninData({ email: signupData.email, password: "", loginAs: "citizen", department: "" });
+          setSignupData({ firstName: "", lastName: "", email: "", password: "", role: UserRole.CITIZEN, department: "" });
+          setActiveTab("signin");
+        }
+      }, 1000);
     } catch (error: any) {
       console.error('Signup error:', error);
-      toast.error(error.message || "Registration failed. Email may already be in use.");
+      setIsLoading(false);
+      if (error.message?.includes("already registered") || error.message?.includes("already been registered")) {
+        toast.error("This email is already registered. Please sign in instead.");
+        setSigninData({ ...signinData, email: signupData.email });
+        setActiveTab("signin");
+      } else {
+        toast.error(error.message || "Registration failed. Please try again.");
+      }
     }
   };
 
@@ -214,8 +248,8 @@ const Auth = () => {
                 </a>
               </div>
 
-              <Button type="submit" className="w-full h-11 bg-primary hover:bg-primary-dark">
-                Sign In
+              <Button type="submit" className="w-full h-11 bg-primary hover:bg-primary-dark" disabled={isLoading}>
+                {isLoading ? "Signing in..." : "Sign In"}
               </Button>
             </form>
           </TabsContent>
@@ -339,8 +373,8 @@ const Auth = () => {
                 </label>
               </div>
 
-              <Button type="submit" className="w-full h-11 bg-accent hover:bg-accent/90">
-                Create Account
+              <Button type="submit" className="w-full h-11 bg-accent hover:bg-accent/90" disabled={isLoading}>
+                {isLoading ? "Creating Account..." : "Create Account"}
               </Button>
             </form>
           </TabsContent>

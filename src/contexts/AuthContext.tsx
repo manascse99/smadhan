@@ -63,31 +63,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    
-    if (error) throw error;
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) throw error;
+      
+      // Session will be handled by onAuthStateChange
+    } catch (error: any) {
+      console.error('Login error:', error);
+      throw new Error(error.message || 'Login failed');
+    }
   };
 
   const signup = async (email: string, password: string, fullName: string, role: UserRole, department?: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-          role,
-          department,
+    try {
+      const redirectUrl = `${window.location.origin}/`;
+      
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectUrl,
+          data: {
+            full_name: fullName,
+            role,
+            department,
+          }
         }
-      }
-    });
-    
-    if (error) throw error;
+      });
+      
+      if (error) throw error;
+      
+      // Profile and role will be created by database trigger
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      throw new Error(error.message || 'Signup failed');
+    }
   };
 
   const logout = async () => {
