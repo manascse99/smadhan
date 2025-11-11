@@ -37,11 +37,18 @@ const Auth = () => {
   });
 
   // Redirect if already logged in
+  const { user } = useAuth();
+  
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/dashboard");
+    if (isAuthenticated && user) {
+      // Redirect based on role
+      if (user.role === 'admin' || user.role === 'officer') {
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/dashboard");
+      }
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, user, navigate]);
 
   const handleSignin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,7 +97,13 @@ const Auth = () => {
     setIsLoading(true);
     try {
       const fullName = `${signupData.firstName} ${signupData.lastName}`;
-      await signup(signupData.email, signupData.password, fullName, UserRole.CITIZEN);
+      await signup(
+        signupData.email, 
+        signupData.password, 
+        fullName, 
+        signupData.role,
+        signupData.role !== UserRole.CITIZEN ? signupData.department : undefined
+      );
       
       // Auto-login immediately after signup
       await login(signupData.email, signupData.password);
@@ -343,6 +356,46 @@ const Auth = () => {
                   </button>
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="role">Sign up as</Label>
+                <Select 
+                  value={signupData.role} 
+                  onValueChange={(value) => setSignupData({ ...signupData, role: value as UserRole })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UserRole.CITIZEN}>Citizen</SelectItem>
+                    <SelectItem value={UserRole.ADMIN}>Department Admin</SelectItem>
+                    <SelectItem value={UserRole.OFFICER}>Department Officer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(signupData.role === UserRole.ADMIN || signupData.role === UserRole.OFFICER) && (
+                <div className="space-y-2">
+                  <Label htmlFor="department">Department</Label>
+                  <Select 
+                    value={signupData.department} 
+                    onValueChange={(value) => setSignupData({ ...signupData, department: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select your department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Water Supply">Water Supply</SelectItem>
+                      <SelectItem value="Electricity">Electricity</SelectItem>
+                      <SelectItem value="Road & Transport">Road & Transport</SelectItem>
+                      <SelectItem value="Waste Management">Waste Management</SelectItem>
+                      <SelectItem value="Public Health">Public Health</SelectItem>
+                      <SelectItem value="Street Lighting">Street Lighting</SelectItem>
+                      <SelectItem value="Parks & Recreation">Parks & Recreation</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="flex items-start space-x-2">
                 <Checkbox id="terms" checked={agreeToTerms} onCheckedChange={(checked) => setAgreeToTerms(checked as boolean)} />

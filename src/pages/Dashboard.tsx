@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { BarChart3, FileText, CheckCircle, Clock, TrendingUp, MapPin, Locate } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -6,22 +7,26 @@ import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { ComplaintCard } from "@/components/ComplaintCard";
-import { mockComplaints } from "@/types/complaint";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const [filterDepartment, setFilterDepartment] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationAddress, setLocationAddress] = useState("");
-  const [complaints, setComplaints] = useState(mockComplaints);
+  const [complaints, setComplaints] = useState<any[]>([]);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const stats = [
-    { label: "Total Filed", value: 2847, icon: FileText, color: "primary" },
-    { label: "Resolved", value: 2156, icon: CheckCircle, color: "secondary" },
-    { label: "Pending", value: 542, icon: Clock, color: "accent" },
-    { label: "Urgent", value: 149, icon: TrendingUp, color: "destructive" },
+    { label: "Total Filed", value: complaints.length, icon: FileText, color: "primary" },
+    { label: "Resolved", value: complaints.filter(c => c.status === 'resolved').length, icon: CheckCircle, color: "secondary" },
+    { label: "Pending", value: complaints.filter(c => c.status === 'filed' || c.status === 'verified').length, icon: Clock, color: "accent" },
+    { label: "In Progress", value: complaints.filter(c => c.status === 'processing').length, icon: TrendingUp, color: "destructive" },
   ];
 
   const departmentData = [
@@ -43,9 +48,48 @@ const Dashboard = () => {
   ];
 
   useEffect(() => {
-    // Auto-detect location on mount
+    if (!isAuthenticated) {
+      toast.error("Please login to view your dashboard");
+      navigate("/auth");
+      return;
+    }
     getUserLocation();
-  }, []);
+    fetchUserComplaints();
+  }, [isAuthenticated, navigate]);
+
+  const fetchUserComplaints = async () => {
+    if (!user) return;
+    
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('complaints')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      const formattedComplaints = (data || []).map(c => ({
+        id: c.id,
+        title: c.title,
+        description: c.description,
+        category: c.category,
+        location: c.location_address,
+        status: c.status,
+        date: new Date(c.created_at).toLocaleDateString(),
+        upvotes: c.upvotes || 0,
+        hasUpvoted: false,
+      }));
+      
+      setComplaints(formattedComplaints);
+    } catch (error: any) {
+      console.error('Error fetching complaints:', error);
+      toast.error("Failed to load your complaints");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getUserLocation = () => {
     setIsLoadingLocation(true);
@@ -93,9 +137,9 @@ const Dashboard = () => {
       <main className="flex-1 container mx-auto px-4 py-12">
         {/* Header */}
         <div className="mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">Dashboard</h1>
+          <h1 className="text-4xl md:text-5xl font-bold mb-4">My Dashboard</h1>
           <p className="text-lg text-muted-foreground">
-            Real-time insights into grievance management across departments
+            Track and manage your submitted complaints
           </p>
         </div>
 
@@ -236,9 +280,14 @@ const Dashboard = () => {
           {/* Complaints Grid */}
           <div className="space-y-4">
             <h3 className="font-semibold text-lg">
-              {filteredComplaints.length} Complaints Found in Your Area
+              {filteredComplaints.length} Your Complaints
             </h3>
-            {filteredComplaints.length > 0 ? (
+            {isLoading ? (
+              <div className="text-center py-12 bg-muted/50 rounded-lg">
+                <Clock className="w-12 h-12 mx-auto mb-3 text-muted-foreground animate-spin" />
+                <p className="text-muted-foreground">Loading your complaints...</p>
+              </div>
+            ) : filteredComplaints.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredComplaints.map(complaint => (
                   <ComplaintCard 
@@ -251,7 +300,10 @@ const Dashboard = () => {
             ) : (
               <div className="text-center py-12 bg-muted/50 rounded-lg">
                 <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                <p className="text-muted-foreground">No complaints found matching your filters</p>
+                <p className="text-muted-foreground">No complaints filed yet. Submit your first complaint to get started!</p>
+                <Button className="mt-4" onClick={() => navigate("/file-complaint")}>
+                  File a Complaint
+                </Button>
               </div>
             )}
           </div>
