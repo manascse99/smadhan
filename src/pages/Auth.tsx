@@ -54,20 +54,18 @@ const Auth = () => {
     setIsLoading(true);
     try {
       await login(signinData.email, signinData.password);
-      toast.success("Welcome back!");
-      setTimeout(() => navigate("/dashboard"), 500);
+      toast.success("Signed in successfully!");
+      // Navigation will happen via useEffect when isAuthenticated becomes true
     } catch (error: any) {
-      console.error('Login error:', error);
+      setIsLoading(false);
       setSigninData({ ...signinData, password: "" });
       if (error.message?.includes("Invalid login credentials")) {
-        toast.error("Invalid email or password. Please try again.");
+        toast.error("Invalid email or password");
       } else if (error.message?.includes("Email not confirmed")) {
-        toast.error("Please verify your email address before signing in.");
+        toast.error("Please verify your email first");
       } else {
-        toast.error(error.message || "Unable to sign in. Please try again.");
+        toast.error(error.message || "Sign in failed");
       }
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -80,7 +78,7 @@ const Auth = () => {
     }
 
     if (!agreeToTerms) {
-      toast.error("Please agree to the terms and conditions");
+      toast.error("Please agree to the terms");
       return;
     }
 
@@ -94,32 +92,18 @@ const Auth = () => {
       const fullName = `${signupData.firstName} ${signupData.lastName}`;
       await signup(signupData.email, signupData.password, fullName, UserRole.CITIZEN);
       
-      toast.success("Account created successfully! Signing you in...");
-      
-      // Auto-login after successful signup
-      setTimeout(async () => {
-        try {
-          await login(signupData.email, signupData.password);
-          toast.success("Welcome to Lok Samadhan!");
-          setTimeout(() => navigate("/dashboard"), 500);
-        } catch (loginError: any) {
-          console.error('Auto-login error:', loginError);
-          setIsLoading(false);
-          toast.info("Please sign in with your new account");
-          setSigninData({ email: signupData.email, password: "", loginAs: "citizen", department: "" });
-          setSignupData({ firstName: "", lastName: "", email: "", password: "", role: UserRole.CITIZEN, department: "" });
-          setActiveTab("signin");
-        }
-      }, 1000);
+      // Auto-login immediately after signup
+      await login(signupData.email, signupData.password);
+      toast.success("Account created! Welcome!");
+      // Navigation will happen via useEffect
     } catch (error: any) {
-      console.error('Signup error:', error);
       setIsLoading(false);
-      if (error.message?.includes("already registered") || error.message?.includes("already been registered")) {
-        toast.error("This email is already registered. Please sign in instead.");
-        setSigninData({ ...signinData, email: signupData.email });
+      if (error.message?.includes("already registered")) {
+        toast.error("Email already registered. Please sign in.");
+        setSigninData({ ...signinData, email: signupData.email, password: "" });
         setActiveTab("signin");
       } else {
-        toast.error(error.message || "Registration failed. Please try again.");
+        toast.error(error.message || "Registration failed");
       }
     }
   };

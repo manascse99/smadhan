@@ -19,89 +19,87 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
-    // Set up auth state listener first
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         setSession(session);
         
         if (session?.user) {
-          // Fetch user profile and role
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          
-          const { data: roleData } = await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', session.user.id)
-            .single();
-          
-          if (profile && roleData) {
-            setUser({
-              id: profile.id,
-              email: profile.email,
-              fullName: profile.full_name,
-              role: roleData.role as UserRole,
-              department: profile.department || undefined,
-              isApproved: true,
-            });
-          }
+          // Defer data fetching to avoid blocking auth state update
+          setTimeout(() => {
+            fetchUserData(session.user.id);
+          }, 0);
         } else {
           setUser(null);
         }
       }
     );
 
-    // Then check for existing session
+    // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      if (session?.user) {
+        fetchUserData(session.user.id);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const fetchUserData = async (userId: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
       
-      if (error) throw error;
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .single();
       
-      // Session will be handled by onAuthStateChange
-    } catch (error: any) {
-      console.error('Login error:', error);
-      throw new Error(error.message || 'Login failed');
+      if (profile && roleData) {
+        setUser({
+          id: profile.id,
+          email: profile.email,
+          fullName: profile.full_name,
+          role: roleData.role as UserRole,
+          department: profile.department || undefined,
+          isApproved: true,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
     }
   };
 
+  const login = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    
+    if (error) throw error;
+  };
+
   const signup = async (email: string, password: string, fullName: string, role: UserRole, department?: string) => {
-    try {
-      const redirectUrl = `${window.location.origin}/`;
-      
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            full_name: fullName,
-            role,
-            department,
-          }
+    const redirectUrl = `${window.location.origin}/`;
+    
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          full_name: fullName,
+          role,
+          department,
         }
-      });
-      
-      if (error) throw error;
-      
-      // Profile and role will be created by database trigger
-    } catch (error: any) {
-      console.error('Signup error:', error);
-      throw new Error(error.message || 'Signup failed');
-    }
+      }
+    });
+    
+    if (error) throw error;
   };
 
   const logout = async () => {
