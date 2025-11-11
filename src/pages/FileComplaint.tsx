@@ -72,20 +72,17 @@ const FileComplaint = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate form
     if (!formData.fullName || !formData.mobile || !formData.email || 
         !formData.title || !formData.category || !formData.description || !formData.location) {
       toast.error("Please fill all required fields");
       return;
     }
 
-    // Validate mobile number
     if (!/^\d{10}$/.test(formData.mobile)) {
       toast.error("Please enter a valid 10-digit mobile number");
       return;
     }
 
-    // Validate email
     if (!/\S+@\S+\.\S+/.test(formData.email)) {
       toast.error("Please enter a valid email address");
       return;
@@ -100,7 +97,6 @@ const FileComplaint = () => {
     setIsSubmitting(true);
 
     try {
-      // Insert complaint into database
       const { data, error } = await supabase
         .from('complaints')
         .insert([{
@@ -115,13 +111,10 @@ const FileComplaint = () => {
 
       if (error) throw error;
 
-      toast.success(`Complaint submitted successfully! ID: ${data.id}`);
-      
-      // Navigate immediately to dashboard
+      toast.success(`Complaint submitted successfully! Tracking ID: ${data.id}`);
       navigate('/dashboard');
     } catch (error: any) {
-      console.error('Error submitting complaint:', error);
-      toast.error(error.message || "Failed to submit complaint");
+      toast.error(error.message || "Failed to submit complaint. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

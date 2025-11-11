@@ -8,153 +8,144 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { Search, LogOut, FileText, Upload, CheckCircle2, Clock } from "lucide-react";
+import { Search, LogOut, FileText, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Complaint {
   id: string;
   title: string;
   description: string;
   category: string;
-  location: string;
-  date: string;
+  location_address: string;
+  created_at: string;
   status: string;
-  priority: string;
-  imageUrl?: string;
-  citizenName: string;
-  citizenContact: string;
-  progress: number;
-  remarks?: string;
-  proofUrls?: string[];
+  user_id: string;
+  department_id: string | null;
+  assigned_to: string | null;
 }
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const [adminData, setAdminData] = useState<any>(null);
+  const { user, isAuthenticated } = useAuth();
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [remarks, setRemarks] = useState("");
-  const [proofFiles, setProofFiles] = useState<FileList | null>(null);
-  const [progressUpdate, setProgressUpdate] = useState(0);
-
-  // Mock complaints - in production, these would be filtered by ML model based on department
-  const allComplaints: Complaint[] = [
-    {
-      id: "LOK12345",
-      title: "Broken Water Pipeline",
-      description: "Major water leakage on MG Road causing water wastage and road damage",
-      category: "Water Supply",
-      location: "MG Road, Sector 21",
-      date: "2024-12-20",
-      status: "processing",
-      priority: "high",
-      citizenName: "Rajesh Kumar",
-      citizenContact: "9876543210",
-      progress: 35,
-      remarks: "Pipeline repair team dispatched",
-      proofUrls: [],
-    },
-    {
-      id: "LOK12346",
-      title: "Pothole on Main Street",
-      description: "Large pothole causing accidents, needs immediate repair",
-      category: "Road & Transport",
-      location: "Main Street, Sector 18",
-      date: "2024-12-19",
-      status: "verified",
-      priority: "medium",
-      citizenName: "Priya Sharma",
-      citizenContact: "9876543211",
-      progress: 10,
-    },
-    {
-      id: "LOK12347",
-      title: "Street Light Not Working",
-      description: "Multiple street lights not working in residential area",
-      category: "Electricity",
-      location: "Green Park, Sector 15",
-      date: "2024-12-18",
-      status: "filed",
-      priority: "low",
-      citizenName: "Amit Patel",
-      citizenContact: "9876543212",
-      progress: 0,
-    },
-    {
-      id: "LOK12348",
-      title: "Garbage Not Collected",
-      description: "Waste accumulation for past 3 days in residential society",
-      category: "Waste Management",
-      location: "Rose Garden, Sector 12",
-      date: "2024-12-17",
-      status: "processing",
-      priority: "high",
-      citizenName: "Sunita Verma",
-      citizenContact: "9876543213",
-      progress: 60,
-      remarks: "Waste collection scheduled for tomorrow",
-    },
-  ];
+  const [newStatus, setNewStatus] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
-    const session = localStorage.getItem("admin_session");
-    if (!session) {
+    if (!isAuthenticated) {
       toast.error("Please login first");
-      navigate("/admin/login");
+      navigate("/auth");
       return;
     }
-    setAdminData(JSON.parse(session));
-  }, [navigate]);
+    fetchComplaints();
+  }, [isAuthenticated, navigate]);
 
-  const departmentComplaints = allComplaints.filter(
-    (c) => c.category === adminData?.department
-  );
+  const fetchComplaints = async () => {
+    try {
+      if (!user) return;
 
-  const filteredComplaints = departmentComplaints.filter(
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('department')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile?.department) {
+        toast.error("No department assigned to your account");
+        return;
+      }
+
+      const { data: dept } = await supabase
+        .from('departments')
+        .select('id')
+        .eq('name', profile.department)
+        .single();
+
+      if (!dept) {
+        toast.error("Department not found");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('complaints')
+        .select('*')
+        .eq('department_id', dept.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setComplaints(data || []);
+    } catch (error: any) {
+      console.error('Error fetching complaints:', error);
+      toast.error("Failed to load complaints");
+    }
+  };
+
+  const filteredComplaints = complaints.filter(
     (c) =>
       c.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.location.toLowerCase().includes(searchQuery.toLowerCase())
+      c.location_address.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleLogout = () => {
-    localStorage.removeItem("admin_session");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     toast.success("Logged out successfully");
-    navigate("/admin/login");
+    navigate("/auth");
   };
 
   const handleViewDetails = (complaint: Complaint) => {
     setSelectedComplaint(complaint);
-    setRemarks(complaint.remarks || "");
-    setProgressUpdate(complaint.progress);
+    setNewStatus(complaint.status);
+    setRemarks("");
     setIsDialogOpen(true);
   };
 
-  const handleUpdateProgress = () => {
-    if (!proofFiles || proofFiles.length === 0) {
-      toast.error("Please upload proof images/videos before updating progress");
+  const handleUpdateComplaint = async () => {
+    if (!selectedComplaint || !user) return;
+
+    if (!remarks.trim()) {
+      toast.error("Please enter remarks");
       return;
     }
 
-    // Mock ML verification
-    toast.loading("Verifying proof with ML model...");
-    
-    setTimeout(() => {
-      toast.dismiss();
-      toast.success("Proof verified by ML model. Notification sent to citizen for approval.");
-      
-      // In production, this would update the database
-      if (selectedComplaint) {
-        selectedComplaint.progress = progressUpdate;
-        selectedComplaint.remarks = remarks;
-      }
-      
+    setIsUpdating(true);
+    try {
+      const { error: complaintError } = await supabase
+        .from('complaints')
+        .update({ status: newStatus as any })
+        .eq('id', selectedComplaint.id);
+
+      if (complaintError) throw complaintError;
+
+      const { error: updateError } = await supabase
+        .from('complaint_updates')
+        .insert({
+          complaint_id: selectedComplaint.id,
+          admin_id: user.id,
+          status: newStatus as any,
+          remarks: remarks,
+        });
+
+      if (updateError) throw updateError;
+
+      toast.success("Complaint updated successfully");
       setIsDialogOpen(false);
-      setProofFiles(null);
-    }, 2000);
+      fetchComplaints();
+    } catch (error: any) {
+      console.error('Error updating complaint:', error);
+      toast.error(error.message || "Failed to update complaint");
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -167,16 +158,7 @@ const AdminDashboard = () => {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high": return "bg-status-urgent";
-      case "medium": return "bg-status-processing";
-      case "low": return "bg-status-verified";
-      default: return "bg-muted";
-    }
-  };
-
-  if (!adminData) return null;
+  if (!isAuthenticated || !user) return null;
 
   return (
     <div className="min-h-screen flex flex-col bg-muted/30">
@@ -188,7 +170,7 @@ const AdminDashboard = () => {
           <div>
             <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
             <p className="text-muted-foreground">
-              Department: <span className="font-semibold text-primary">{adminData.department}</span>
+              Managing: <span className="font-semibold text-primary">{complaints.length} Complaints</span>
             </p>
           </div>
           <Button onClick={handleLogout} variant="outline">
@@ -203,7 +185,7 @@ const AdminDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Total Complaints</p>
-                <p className="text-3xl font-bold">{departmentComplaints.length}</p>
+                <p className="text-3xl font-bold">{complaints.length}</p>
               </div>
               <FileText className="w-8 h-8 text-primary" />
             </div>
@@ -213,7 +195,7 @@ const AdminDashboard = () => {
               <div>
                 <p className="text-sm text-muted-foreground mb-1">In Progress</p>
                 <p className="text-3xl font-bold">
-                  {departmentComplaints.filter((c) => c.status === "processing").length}
+                  {complaints.filter((c) => c.status === "processing").length}
                 </p>
               </div>
               <Clock className="w-8 h-8 text-status-processing" />
@@ -224,7 +206,7 @@ const AdminDashboard = () => {
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Resolved</p>
                 <p className="text-3xl font-bold">
-                  {departmentComplaints.filter((c) => c.status === "resolved").length}
+                  {complaints.filter((c) => c.status === "resolved").length}
                 </p>
               </div>
               <CheckCircle2 className="w-8 h-8 text-status-resolved" />
@@ -233,9 +215,9 @@ const AdminDashboard = () => {
           <Card className="gradient-card p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">High Priority</p>
+                <p className="text-sm text-muted-foreground mb-1">Verified</p>
                 <p className="text-3xl font-bold">
-                  {departmentComplaints.filter((c) => c.priority === "high").length}
+                  {complaints.filter((c) => c.status === "verified").length}
                 </p>
               </div>
               <div className="w-8 h-8 rounded-full bg-status-urgent flex items-center justify-center text-white font-bold">
@@ -269,8 +251,6 @@ const AdminDashboard = () => {
                   <th className="px-6 py-4 text-left text-sm font-semibold">Location</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold">Date</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold">Status</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold">Priority</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold">Progress</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold">Action</th>
                 </tr>
               </thead>
@@ -284,26 +264,15 @@ const AdminDashboard = () => {
                       <p className="font-medium">{complaint.title}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm text-muted-foreground">{complaint.location}</p>
+                      <p className="text-sm text-muted-foreground">{complaint.location_address}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm">{complaint.date}</p>
+                      <p className="text-sm">{new Date(complaint.created_at).toLocaleDateString()}</p>
                     </td>
                     <td className="px-6 py-4">
                       <Badge className={`${getStatusColor(complaint.status)} text-white`}>
                         {complaint.status}
                       </Badge>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Badge className={`${getPriorityColor(complaint.priority)} text-white`}>
-                        {complaint.priority}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="w-24">
-                        <Progress value={complaint.progress} className="h-2" />
-                        <p className="text-xs text-muted-foreground mt-1">{complaint.progress}%</p>
-                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <Button
@@ -330,101 +299,73 @@ const AdminDashboard = () => {
 
             {selectedComplaint && (
               <div className="space-y-6">
-                {/* Complaint Details */}
                 <div className="space-y-4">
                   <div>
                     <h3 className="font-semibold mb-2">{selectedComplaint.title}</h3>
-                    <p className="text-sm text-muted-foreground">{selectedComplaint.description}</p>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedComplaint.description}</p>
                   </div>
-
-                  {selectedComplaint.imageUrl && (
-                    <div>
-                      <Label>Citizen's Evidence</Label>
-                      <img
-                        src={selectedComplaint.imageUrl}
-                        alt="Complaint evidence"
-                        className="w-full rounded-lg mt-2"
-                      />
-                    </div>
-                  )}
 
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <Label className="text-muted-foreground">Citizen Name</Label>
-                      <p className="font-medium">{selectedComplaint.citizenName}</p>
+                      <Label className="text-muted-foreground">Complaint ID</Label>
+                      <p className="font-medium font-mono">{selectedComplaint.id}</p>
                     </div>
                     <div>
-                      <Label className="text-muted-foreground">Contact</Label>
-                      <p className="font-medium">{selectedComplaint.citizenContact}</p>
+                      <Label className="text-muted-foreground">Category</Label>
+                      <p className="font-medium">{selectedComplaint.category}</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Location</Label>
-                      <p className="font-medium">{selectedComplaint.location}</p>
+                      <p className="font-medium">{selectedComplaint.location_address}</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Date Filed</Label>
-                      <p className="font-medium">{selectedComplaint.date}</p>
+                      <p className="font-medium">{new Date(selectedComplaint.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Current Status</Label>
+                      <Badge className={`${getStatusColor(selectedComplaint.status)} text-white`}>
+                        {selectedComplaint.status}
+                      </Badge>
                     </div>
                   </div>
                 </div>
 
-                {/* Progress Update */}
                 <div className="space-y-4 pt-4 border-t">
                   <div className="space-y-2">
-                    <Label>Update Progress ({progressUpdate}%)</Label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={progressUpdate}
-                      onChange={(e) => setProgressUpdate(parseInt(e.target.value))}
-                      className="w-full"
-                    />
+                    <Label htmlFor="status">Update Status</Label>
+                    <Select value={newStatus} onValueChange={setNewStatus}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select new status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="filed">Filed</SelectItem>
+                        <SelectItem value="verified">Verified</SelectItem>
+                        <SelectItem value="processing">Processing</SelectItem>
+                        <SelectItem value="resolved">Resolved</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="remarks">Remarks / Update Message</Label>
+                    <Label htmlFor="remarks">Remarks / Update Message *</Label>
                     <Textarea
                       id="remarks"
-                      placeholder="Enter progress update details..."
+                      placeholder="Enter update details for the citizen..."
                       value={remarks}
                       onChange={(e) => setRemarks(e.target.value)}
                       rows={4}
+                      required
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="proof">Upload Proof (Images/Videos) *</Label>
-                    <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
-                      <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                      <Input
-                        id="proof"
-                        type="file"
-                        accept="image/*,video/*"
-                        multiple
-                        onChange={(e) => setProofFiles(e.target.files)}
-                        className="max-w-xs mx-auto"
-                      />
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Required: Upload images or videos as proof of work
-                      </p>
-                      {proofFiles && (
-                        <p className="text-sm text-primary mt-2">
-                          {proofFiles.length} file(s) selected
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="bg-muted/50 p-4 rounded-lg">
-                    <p className="text-sm text-muted-foreground">
-                      <strong>Note:</strong> Uploaded proof will be verified by ML model and sent to the
-                      citizen for approval. Progress will be updated only after verification.
-                    </p>
-                  </div>
-
-                  <Button onClick={handleUpdateProgress} className="w-full" size="lg">
-                    Submit Update for Verification
+                  <Button 
+                    onClick={handleUpdateComplaint} 
+                    className="w-full" 
+                    size="lg"
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? "Updating..." : "Submit Update"}
                   </Button>
                 </div>
               </div>
