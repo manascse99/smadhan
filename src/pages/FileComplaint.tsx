@@ -69,6 +69,32 @@ const FileComplaint = () => {
     }
   };
 
+  const uploadImages = async (complaintId: string): Promise<string[]> => {
+    const uploadedUrls: string[] = [];
+    
+    for (const image of images) {
+      const fileExt = image.name.split('.').pop();
+      const fileName = `${user?.id}/${complaintId}/${Date.now()}.${fileExt}`;
+      
+      const { data, error } = await supabase.storage
+        .from('complaint-images')
+        .upload(fileName, image);
+      
+      if (error) {
+        console.error('Image upload error:', error);
+        continue;
+      }
+      
+      const { data: urlData } = supabase.storage
+        .from('complaint-images')
+        .getPublicUrl(data.path);
+      
+      uploadedUrls.push(urlData.publicUrl);
+    }
+    
+    return uploadedUrls;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -97,6 +123,7 @@ const FileComplaint = () => {
     setIsSubmitting(true);
 
     try {
+      // First create the complaint
       const { data, error } = await supabase
         .from('complaints')
         .insert([{
@@ -111,9 +138,22 @@ const FileComplaint = () => {
 
       if (error) throw error;
 
+      // Upload images if any
+      if (images.length > 0) {
+        const imageUrls = await uploadImages(data.id);
+        
+        if (imageUrls.length > 0) {
+          await supabase
+            .from('complaints')
+            .update({ image_urls: imageUrls })
+            .eq('id', data.id);
+        }
+      }
+
       toast.success(`Complaint submitted successfully! Tracking ID: ${data.id}`);
       navigate('/dashboard');
     } catch (error: any) {
+      console.error('Submission error:', error);
       toast.error(error.message || "Failed to submit complaint. Please try again.");
     } finally {
       setIsSubmitting(false);
