@@ -75,12 +75,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const login = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     
-    if (error) throw error;
+    if (error) {
+      if (error.message?.includes('Invalid login credentials')) {
+        throw new Error('Invalid email or password. Please try again.');
+      }
+      if (error.message?.includes('Email not confirmed')) {
+        throw new Error('Please verify your email address first.');
+      }
+      throw error;
+    }
+    
+    // Set session and user immediately
+    if (data.session) {
+      setSession(data.session);
+      if (data.user) {
+        fetchUserData(data.user.id);
+      }
+    }
   };
 
   const signup = async (email: string, password: string, fullName: string, role: UserRole, department?: string) => {
@@ -99,7 +115,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
     
-    if (error) throw error;
+    if (error) {
+      if (error.message?.includes('already registered')) {
+        throw new Error('This email is already registered. Please sign in instead.');
+      }
+      throw error;
+    }
   };
 
   const logout = async () => {
