@@ -8,6 +8,8 @@ interface AuthContextType {
   session: Session | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, fullName: string, role: UserRole, department?: string) => Promise<void>;
+  verifyOtp: (email: string, token: string) => Promise<void>;
+  resendOtp: (email: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -121,6 +123,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       throw error;
     }
+    // Don't auto-login - user needs to verify OTP first
+  };
+
+  const verifyOtp = async (email: string, token: string) => {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'signup',
+    });
+
+    if (error) {
+      if (error.message?.includes('Invalid') || error.message?.includes('expired')) {
+        throw new Error('Invalid or expired code. Please try again.');
+      }
+      throw error;
+    }
+
+    // Set session after successful verification
+    if (data.session) {
+      setSession(data.session);
+      if (data.user) {
+        fetchUserData(data.user.id);
+      }
+    }
+  };
+
+  const resendOtp = async (email: string) => {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+    });
+
+    if (error) {
+      throw error;
+    }
   };
 
   const logout = async () => {
@@ -130,7 +167,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, login, signup, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, session, login, signup, verifyOtp, resendOtp, logout, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );
