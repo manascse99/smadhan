@@ -15,7 +15,7 @@ import { UserRole } from "@/types/roles";
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { login, signup, verifyOtp, resendOtp, isAuthenticated } = useAuth();
+  const { login, signup, sendOtp, verifyCustomOtp, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<"signin" | "signup">("signin");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -111,26 +111,16 @@ const Auth = () => {
     setIsLoading(true);
     try {
       const fullName = `${signupData.firstName} ${signupData.lastName}`;
-      await signup(
-        signupData.email, 
-        signupData.password, 
-        fullName, 
-        signupData.role,
-        signupData.role !== UserRole.CITIZEN ? signupData.department : undefined
-      );
+      
+      // Send OTP first
+      await sendOtp(signupData.email, fullName);
       
       // Move to OTP verification step
       setSignupStep("otp");
       setResendCooldown(60);
       toast.success("Verification code sent to your email!");
     } catch (error: any) {
-      if (error.message?.includes("already registered")) {
-        toast.error("Email already registered. Please sign in.");
-        setSigninData({ ...signinData, email: signupData.email, password: "" });
-        setActiveTab("signin");
-      } else {
-        toast.error(error.message || "Registration failed");
-      }
+      toast.error(error.message || "Failed to send verification code");
     } finally {
       setIsLoading(false);
     }
@@ -144,25 +134,50 @@ const Auth = () => {
 
     setIsLoading(true);
     try {
-      await verifyOtp(signupData.email, otpValue);
+      // Verify the OTP first
+      await verifyCustomOtp(signupData.email, otpValue);
+      
+      // OTP verified, now create the account
+      const fullName = `${signupData.firstName} ${signupData.lastName}`;
+      await signup(
+        signupData.email, 
+        signupData.password, 
+        fullName, 
+        signupData.role,
+        signupData.role !== UserRole.CITIZEN ? signupData.department : undefined
+      );
+      
+      // Auto-login after successful signup
+      await login(signupData.email, signupData.password);
       toast.success("Account verified! Welcome!");
       // Navigation will happen via useEffect when isAuthenticated becomes true
     } catch (error: any) {
       setIsLoading(false);
-      setOtpValue("");
-      toast.error(error.message || "Verification failed");
+      if (error.message?.includes("already registered")) {
+        toast.error("Email already registered. Please sign in.");
+        setSigninData({ ...signinData, email: signupData.email, password: "" });
+        setActiveTab("signin");
+        setSignupStep("form");
+      } else {
+        setOtpValue("");
+        toast.error(error.message || "Verification failed");
+      }
     }
   };
 
   const handleResendOtp = async () => {
     if (resendCooldown > 0) return;
     
+    setIsLoading(true);
     try {
-      await resendOtp(signupData.email);
+      const fullName = `${signupData.firstName} ${signupData.lastName}`;
+      await sendOtp(signupData.email, fullName);
       setResendCooldown(60);
       toast.success("New code sent to your email!");
     } catch (error: any) {
       toast.error(error.message || "Failed to resend code");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -464,7 +479,7 @@ const Auth = () => {
                   </div>
 
                   <Button type="submit" className="w-full h-11 bg-accent hover:bg-accent/90" disabled={isLoading}>
-                    {isLoading ? "Creating Account..." : "Create Account"}
+                    {isLoading ? "Sending Code..." : "Create Account"}
                   </Button>
                 </form>
               </>
@@ -521,9 +536,9 @@ const Auth = () => {
                   </p>
                   <button 
                     onClick={handleResendOtp}
-                    disabled={resendCooldown > 0}
+                    disabled={resendCooldown > 0 || isLoading}
                     className={`text-sm font-medium ${
-                      resendCooldown > 0 
+                      resendCooldown > 0 || isLoading
                         ? 'text-muted-foreground cursor-not-allowed' 
                         : 'text-primary hover:underline'
                     }`}
