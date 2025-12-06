@@ -8,8 +8,8 @@ interface AuthContextType {
   session: Session | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, fullName: string, role: UserRole, department?: string) => Promise<void>;
-  verifyOtp: (email: string, token: string) => Promise<void>;
-  resendOtp: (email: string) => Promise<void>;
+  sendOtp: (email: string, name: string) => Promise<void>;
+  verifyCustomOtp: (email: string, code: string) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -123,41 +123,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       throw error;
     }
-    // Don't auto-login - user needs to verify OTP first
   };
 
-  const verifyOtp = async (email: string, token: string) => {
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: 'signup',
+  const sendOtp = async (email: string, name: string) => {
+    const { data, error } = await supabase.functions.invoke('send-otp', {
+      body: { email, name },
     });
 
     if (error) {
-      if (error.message?.includes('Invalid') || error.message?.includes('expired')) {
-        throw new Error('Invalid or expired code. Please try again.');
-      }
-      throw error;
+      console.error('Send OTP error:', error);
+      throw new Error('Failed to send verification code');
     }
 
-    // Set session after successful verification
-    if (data.session) {
-      setSession(data.session);
-      if (data.user) {
-        fetchUserData(data.user.id);
-      }
+    if (data?.error) {
+      throw new Error(data.error);
     }
   };
 
-  const resendOtp = async (email: string) => {
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email,
+  const verifyCustomOtp = async (email: string, code: string): Promise<boolean> => {
+    const { data, error } = await supabase.functions.invoke('verify-otp', {
+      body: { email, code },
     });
 
     if (error) {
-      throw error;
+      console.error('Verify OTP error:', error);
+      throw new Error('Failed to verify code');
     }
+
+    if (!data?.valid) {
+      throw new Error(data?.error || 'Invalid verification code');
+    }
+
+    return true;
   };
 
   const logout = async () => {
@@ -167,7 +164,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, login, signup, verifyOtp, resendOtp, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, session, login, signup, sendOtp, verifyCustomOtp, logout, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );
