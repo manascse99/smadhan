@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, LogOut, FileText, CheckCircle2, Clock, Image } from "lucide-react";
+import { Search, LogOut, FileText, CheckCircle2, Clock, Image, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -39,6 +39,10 @@ const AdminDashboard = () => {
   const [remarks, setRemarks] = useState("");
   const [newStatus, setNewStatus] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -106,7 +110,33 @@ const AdminDashboard = () => {
     setSelectedComplaint(complaint);
     setNewStatus(complaint.status);
     setRemarks("");
+    setProofFile(null);
+    setProofPreview(null);
     setIsDialogOpen(true);
+  };
+
+  const handleProofUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("File size must be less than 5MB");
+        return;
+      }
+      setProofFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProofPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeProof = () => {
+    setProofFile(null);
+    setProofPreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleUpdateComplaint = async () => {
@@ -119,6 +149,35 @@ const AdminDashboard = () => {
 
     setIsUpdating(true);
     try {
+      let proofUrl: string | null = null;
+
+      // Upload proof if provided
+      if (proofFile) {
+        setIsUploading(true);
+        const fileExt = proofFile.name.split('.').pop();
+        const fileName = `${selectedComplaint.id}_${Date.now()}.${fileExt}`;
+        const filePath = `proofs/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('complaint-media')
+          .upload(filePath, proofFile);
+
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          toast.error("Failed to upload proof image");
+          setIsUploading(false);
+          setIsUpdating(false);
+          return;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('complaint-media')
+          .getPublicUrl(filePath);
+
+        proofUrl = publicUrl;
+        setIsUploading(false);
+      }
+
       const { error: complaintError } = await supabase
         .from('complaints')
         .update({ status: newStatus as any })
@@ -133,18 +192,22 @@ const AdminDashboard = () => {
           admin_id: user.id,
           status: newStatus as any,
           remarks: remarks,
+          proof_url: proofUrl,
         });
 
       if (updateError) throw updateError;
 
       toast.success("Complaint updated successfully");
       setIsDialogOpen(false);
+      setProofFile(null);
+      setProofPreview(null);
       fetchComplaints();
     } catch (error: any) {
       console.error('Error updating complaint:', error);
       toast.error(error.message || "Failed to update complaint");
     } finally {
       setIsUpdating(false);
+      setIsUploading(false);
     }
   };
 
@@ -381,13 +444,56 @@ const AdminDashboard = () => {
                     />
                   </div>
 
+                  {/* Proof Upload */}
+                  <div className="space-y-2">
+                    <Label>Upload Proof (Optional)</Label>
+                    <p className="text-xs text-muted-foreground">Upload image proof of resolution/progress</p>
+                    
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleProofUpload}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    
+                    {!proofPreview ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full border-dashed"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload Proof Image
+                      </Button>
+                    ) : (
+                      <div className="relative inline-block">
+                        <img 
+                          src={proofPreview} 
+                          alt="Proof preview" 
+                          className="h-32 rounded-lg object-cover"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute -top-2 -right-2 h-6 w-6"
+                          onClick={removeProof}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
                   <Button 
                     onClick={handleUpdateComplaint} 
                     className="w-full" 
                     size="lg"
-                    disabled={isUpdating}
+                    disabled={isUpdating || isUploading}
                   >
-                    {isUpdating ? "Updating..." : "Submit Update"}
+                    {isUploading ? "Uploading Proof..." : isUpdating ? "Updating..." : "Submit Update"}
                   </Button>
                 </div>
               </div>
