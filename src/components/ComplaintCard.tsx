@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MapPin, ThumbsUp, Calendar, Hash, Eye } from "lucide-react";
+import { MapPin, ThumbsUp, Calendar, Hash, Eye, Image } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -36,18 +36,32 @@ export const ComplaintCard = ({ complaint, onUpvote }: ComplaintCardProps) => {
     resolved: "status-resolved"
   };
 
+  // Get all images (support both imageUrl and imageUrls)
+  const allImages = [
+    ...(complaint.imageUrl ? [complaint.imageUrl] : []),
+    ...(complaint.imageUrls || [])
+  ];
+  const hasImages = allImages.length > 0;
+  const previewImage = allImages[0];
+
   return (
     <>
       <Card className="gradient-card p-6 hover:shadow-lg transition-all hover:-translate-y-1 cursor-pointer" onClick={() => setShowDetails(true)}>
         <div className="space-y-4">
-          {/* Image */}
-          {complaint.imageUrl && (
-            <div className="w-full h-48 rounded-lg overflow-hidden">
+          {/* Image Preview */}
+          {previewImage && (
+            <div className="w-full h-48 rounded-lg overflow-hidden relative">
               <img 
-                src={complaint.imageUrl} 
+                src={previewImage} 
                 alt={complaint.title}
                 className="w-full h-full object-cover"
               />
+              {allImages.length > 1 && (
+                <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
+                  <Image className="w-3 h-3" />
+                  +{allImages.length - 1}
+                </div>
+              )}
             </div>
           )}
 
@@ -129,14 +143,25 @@ export const ComplaintCard = ({ complaint, onUpvote }: ComplaintCardProps) => {
           </DialogHeader>
 
           <div className="space-y-6">
-            {/* Image */}
-            {complaint.imageUrl && (
-              <div className="w-full rounded-lg overflow-hidden">
-                <img 
-                  src={complaint.imageUrl} 
-                  alt={complaint.title}
-                  className="w-full h-auto"
-                />
+            {/* Images Gallery */}
+            {hasImages && (
+              <div className="space-y-2">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <Image className="w-4 h-4" />
+                  Attached Media ({allImages.length})
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {allImages.map((url, index) => (
+                    <div key={index} className="rounded-lg overflow-hidden">
+                      <img 
+                        src={url} 
+                        alt={`${complaint.title} - Image ${index + 1}`}
+                        className="w-full h-48 object-cover hover:scale-105 transition-transform cursor-pointer"
+                        onClick={() => window.open(url, '_blank')}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

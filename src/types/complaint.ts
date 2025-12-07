@@ -12,6 +12,7 @@ export interface Complaint {
   status: 'filed' | 'verified' | 'processing' | 'resolved';
   date: string;
   imageUrl?: string;
+  imageUrls?: string[];
   hasUpvoted?: boolean;
 }
 
