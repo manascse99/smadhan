@@ -8,8 +8,7 @@ interface AuthContextType {
   session: Session | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, fullName: string, role: UserRole, department?: string) => Promise<void>;
-  sendOtp: (email: string, name: string) => Promise<void>;
-  verifyCustomOtp: (email: string, code: string) => Promise<boolean>;
+  resetPassword: (email: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -26,7 +25,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setSession(session);
         
         if (session?.user) {
-          // Defer data fetching to avoid blocking auth state update
           setTimeout(() => {
             fetchUserData(session.user.id);
           }, 0);
@@ -36,7 +34,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
-    // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
@@ -92,7 +89,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw error;
     }
     
-    // Set session and user immediately
     if (data.session) {
       setSession(data.session);
       if (data.user) {
@@ -102,7 +98,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signup = async (email: string, password: string, fullName: string, role: UserRole, department?: string) => {
-    const redirectUrl = `${window.location.origin}/`;
+    const redirectUrl = `${window.location.origin}/auth`;
     
     const { error } = await supabase.auth.signUp({
       email,
@@ -125,36 +121,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const sendOtp = async (email: string, name: string) => {
-    const { data, error } = await supabase.functions.invoke('send-otp', {
-      body: { email, name },
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth?reset=true`,
     });
-
-    if (error) {
-      console.error('Send OTP error:', error);
-      throw new Error('Failed to send verification code');
-    }
-
-    if (data?.error) {
-      throw new Error(data.error);
-    }
-  };
-
-  const verifyCustomOtp = async (email: string, code: string): Promise<boolean> => {
-    const { data, error } = await supabase.functions.invoke('verify-otp', {
-      body: { email, code },
-    });
-
-    if (error) {
-      console.error('Verify OTP error:', error);
-      throw new Error('Failed to verify code');
-    }
-
-    if (!data?.valid) {
-      throw new Error(data?.error || 'Invalid verification code');
-    }
-
-    return true;
+    
+    if (error) throw error;
   };
 
   const logout = async () => {
@@ -164,7 +136,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, login, signup, sendOtp, verifyCustomOtp, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, session, login, signup, resetPassword, logout, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

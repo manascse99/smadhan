@@ -7,8 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
-import { Search, LogOut, FileText, CheckCircle2, Clock } from "lucide-react";
+import { Search, LogOut, FileText, CheckCircle2, Clock, Image } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -27,6 +26,7 @@ interface Complaint {
   user_id: string;
   department_id: string | null;
   assigned_to: string | null;
+  image_urls: string[] | null;
 }
 
 const AdminDashboard = () => {
@@ -304,6 +304,28 @@ const AdminDashboard = () => {
                     <h3 className="font-semibold mb-2">{selectedComplaint.title}</h3>
                     <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedComplaint.description}</p>
                   </div>
+
+                  {/* Attached Media */}
+                  {selectedComplaint.image_urls && selectedComplaint.image_urls.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground flex items-center gap-2">
+                        <Image className="w-4 h-4" />
+                        Attached Media ({selectedComplaint.image_urls.length})
+                      </Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {selectedComplaint.image_urls.map((url, index) => (
+                          <div key={index} className="rounded-lg overflow-hidden border">
+                            <img 
+                              src={url} 
+                              alt={`Complaint Image ${index + 1}`}
+                              className="w-full h-32 object-cover hover:scale-105 transition-transform cursor-pointer"
+                              onClick={() => window.open(url, '_blank')}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>

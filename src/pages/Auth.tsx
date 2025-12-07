@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Scale, Mail, Lock, Eye, EyeOff, ArrowLeft, KeyRound } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { Scale, Mail, Lock, Eye, EyeOff, ArrowLeft, KeyRound, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,35 +8,30 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserRole } from "@/types/roles";
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { login, signup, sendOtp, verifyCustomOtp, isAuthenticated } = useAuth();
+  const { login, signup, resetPassword, isAuthenticated, user } = useAuth();
   const [activeTab, setActiveTab] = useState<"signin" | "signup">("signin");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
-  // OTP verification state
-  const [signupStep, setSignupStep] = useState<"form" | "otp">("form");
+  // Signup success state
+  const [signupSuccess, setSignupSuccess] = useState(false);
   
   // Forgot password state
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
   const [resetEmailSent, setResetEmailSent] = useState(false);
-  const [otpValue, setOtpValue] = useState("");
-  const [resendCooldown, setResendCooldown] = useState(0);
   
   const [signinData, setSigninData] = useState({ 
     email: "", 
     password: "",
-    loginAs: "citizen" as "citizen" | "admin",
-    department: ""
   });
   const [signupData, setSignupData] = useState({
     firstName: "",
@@ -48,12 +42,8 @@ const Auth = () => {
     department: "",
   });
 
-  // Redirect if already logged in
-  const { user } = useAuth();
-  
   useEffect(() => {
     if (isAuthenticated && user) {
-      // Redirect based on role
       if (user.role === 'admin' || user.role === 'officer') {
         navigate("/admin/dashboard");
       } else {
@@ -61,14 +51,6 @@ const Auth = () => {
       }
     }
   }, [isAuthenticated, user, navigate]);
-
-  // Resend cooldown timer
-  useEffect(() => {
-    if (resendCooldown > 0) {
-      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [resendCooldown]);
 
   const handleSignin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +64,6 @@ const Auth = () => {
     try {
       await login(signinData.email, signinData.password);
       toast.success("Signed in successfully!");
-      // Navigation will happen via useEffect when isAuthenticated becomes true
     } catch (error: any) {
       setIsLoading(false);
       setSigninData({ ...signinData, password: "" });
@@ -117,34 +98,6 @@ const Auth = () => {
     setIsLoading(true);
     try {
       const fullName = `${signupData.firstName} ${signupData.lastName}`;
-      
-      // Send OTP first
-      await sendOtp(signupData.email, fullName);
-      
-      // Move to OTP verification step
-      setSignupStep("otp");
-      setResendCooldown(60);
-      toast.success("Verification code sent to your email!");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to send verification code");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    if (otpValue.length !== 6) {
-      toast.error("Please enter the 6-digit code");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      // Verify the OTP first
-      await verifyCustomOtp(signupData.email, otpValue);
-      
-      // OTP verified, now create the account
-      const fullName = `${signupData.firstName} ${signupData.lastName}`;
       await signup(
         signupData.email, 
         signupData.password, 
@@ -153,43 +106,19 @@ const Auth = () => {
         signupData.role !== UserRole.CITIZEN ? signupData.department : undefined
       );
       
-      // Auto-login after successful signup
-      await login(signupData.email, signupData.password);
-      toast.success("Account verified! Welcome!");
-      // Navigation will happen via useEffect when isAuthenticated becomes true
+      setSignupSuccess(true);
+      toast.success("Account created! Please check your email to verify.");
     } catch (error: any) {
-      setIsLoading(false);
       if (error.message?.includes("already registered")) {
         toast.error("Email already registered. Please sign in.");
         setSigninData({ ...signinData, email: signupData.email, password: "" });
         setActiveTab("signin");
-        setSignupStep("form");
       } else {
-        setOtpValue("");
-        toast.error(error.message || "Verification failed");
+        toast.error(error.message || "Sign up failed");
       }
-    }
-  };
-
-  const handleResendOtp = async () => {
-    if (resendCooldown > 0) return;
-    
-    setIsLoading(true);
-    try {
-      const fullName = `${signupData.firstName} ${signupData.lastName}`;
-      await sendOtp(signupData.email, fullName);
-      setResendCooldown(60);
-      toast.success("New code sent to your email!");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to resend code");
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleBackToForm = () => {
-    setSignupStep("form");
-    setOtpValue("");
   };
 
   const handleSocialAuth = (provider: string) => {
@@ -206,12 +135,7 @@ const Auth = () => {
 
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail, {
-        redirectTo: `${window.location.origin}/auth?reset=true`,
-      });
-      
-      if (error) throw error;
-      
+      await resetPassword(forgotPasswordEmail);
       setResetEmailSent(true);
       toast.success("Password reset email sent! Check your inbox.");
     } catch (error: any) {
@@ -225,6 +149,19 @@ const Auth = () => {
     setShowForgotPassword(false);
     setForgotPasswordEmail("");
     setResetEmailSent(false);
+  };
+
+  const handleBackToSignup = () => {
+    setSignupSuccess(false);
+    setSignupData({
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      role: UserRole.CITIZEN,
+      department: "",
+    });
+    setAgreeToTerms(false);
   };
 
   return (
@@ -246,7 +183,7 @@ const Auth = () => {
           </Link>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as "signin" | "signup"); setSignupStep("form"); }} className="px-8 pb-8">
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as "signin" | "signup"); setSignupSuccess(false); }} className="px-8 pb-8">
           <TabsList className="grid w-full grid-cols-2 mb-6">
             <TabsTrigger value="signin" className="text-base">Sign In</TabsTrigger>
             <TabsTrigger value="signup" className="text-base">Sign Up</TabsTrigger>
@@ -255,7 +192,6 @@ const Auth = () => {
           {/* Sign In Tab */}
           <TabsContent value="signin" className="space-y-4">
             {showForgotPassword ? (
-              // Forgot Password View
               <div className="space-y-6">
                 <button 
                   onClick={handleBackFromForgotPassword}
@@ -319,7 +255,6 @@ const Auth = () => {
                 )}
               </div>
             ) : (
-              // Normal Sign In View
               <>
                 <div className="text-center mb-4">
                   <h2 className="text-2xl font-bold mb-1">Welcome Back!</h2>
@@ -429,11 +364,40 @@ const Auth = () => {
 
           {/* Sign Up Tab */}
           <TabsContent value="signup" className="space-y-4">
-            {signupStep === "form" ? (
+            {signupSuccess ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <h2 className="text-2xl font-bold mb-2">Verify Your Email</h2>
+                <p className="text-sm text-muted-foreground mb-4">
+                  We've sent a verification link to<br />
+                  <span className="font-medium text-foreground">{signupData.email}</span>
+                </p>
+                <p className="text-sm text-muted-foreground mb-6">
+                  Click the link in the email to verify your account and start using the platform.
+                </p>
+                <div className="space-y-3">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setActiveTab("signin")}
+                    className="w-full"
+                  >
+                    Go to Sign In
+                  </Button>
+                  <button 
+                    onClick={handleBackToSignup}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Create another account
+                  </button>
+                </div>
+              </div>
+            ) : (
               <>
                 <div className="text-center mb-4">
-                  <h2 className="text-2xl font-bold mb-1">Join Lok Samadhan</h2>
-                  <p className="text-sm text-muted-foreground">Create your account to get started</p>
+                  <h2 className="text-2xl font-bold mb-1">Create Account</h2>
+                  <p className="text-sm text-muted-foreground">Join the civic movement</p>
                 </div>
 
                 {/* Social Auth */}
@@ -462,7 +426,7 @@ const Auth = () => {
                     <svg className="w-5 h-5 mr-2" fill="#1877F2" viewBox="0 0 24 24">
                       <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                     </svg>
-                    Continue with Facebook
+                    Sign up with Facebook
                   </Button>
                 </div>
 
@@ -476,7 +440,7 @@ const Auth = () => {
                 </div>
 
                 <form onSubmit={handleSignup} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="firstName">First Name</Label>
                       <Input
@@ -535,23 +499,23 @@ const Auth = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="role">Sign up as</Label>
+                    <Label htmlFor="role">I am a</Label>
                     <Select 
                       value={signupData.role} 
-                      onValueChange={(value) => setSignupData({ ...signupData, role: value as UserRole })}
+                      onValueChange={(value: UserRole) => setSignupData({ ...signupData, role: value })}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select role" />
+                        <SelectValue placeholder="Select your role" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={UserRole.CITIZEN}>Citizen</SelectItem>
-                        <SelectItem value={UserRole.ADMIN}>Department Admin</SelectItem>
-                        <SelectItem value={UserRole.OFFICER}>Department Officer</SelectItem>
+                        <SelectItem value={UserRole.OFFICER}>Government Officer</SelectItem>
+                        <SelectItem value={UserRole.ADMIN}>Administrator</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {(signupData.role === UserRole.ADMIN || signupData.role === UserRole.OFFICER) && (
+                  {(signupData.role === UserRole.OFFICER || signupData.role === UserRole.ADMIN) && (
                     <div className="space-y-2">
                       <Label htmlFor="department">Department</Label>
                       <Select 
@@ -559,104 +523,39 @@ const Auth = () => {
                         onValueChange={(value) => setSignupData({ ...signupData, department: value })}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select your department" />
+                          <SelectValue placeholder="Select department" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Water Supply">Water Supply</SelectItem>
-                          <SelectItem value="Electricity">Electricity</SelectItem>
                           <SelectItem value="Road & Transport">Road & Transport</SelectItem>
+                          <SelectItem value="Electricity">Electricity</SelectItem>
                           <SelectItem value="Waste Management">Waste Management</SelectItem>
-                          <SelectItem value="Public Health">Public Health</SelectItem>
-                          <SelectItem value="Street Lighting">Street Lighting</SelectItem>
-                          <SelectItem value="Parks & Recreation">Parks & Recreation</SelectItem>
+                          <SelectItem value="Public Safety">Public Safety</SelectItem>
+                          <SelectItem value="Healthcare">Healthcare</SelectItem>
+                          <SelectItem value="Education">Education</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   )}
 
                   <div className="flex items-start space-x-2">
-                    <Checkbox id="terms" checked={agreeToTerms} onCheckedChange={(checked) => setAgreeToTerms(checked as boolean)} />
-                    <label htmlFor="terms" className="text-sm text-muted-foreground cursor-pointer leading-tight">
-                      I agree to the{" "}
-                      <a href="#" className="text-primary hover:underline">
-                        Terms & Conditions
-                      </a>{" "}
-                      and{" "}
-                      <a href="#" className="text-primary hover:underline">
-                        Privacy Policy
-                      </a>
+                    <Checkbox 
+                      id="terms" 
+                      checked={agreeToTerms} 
+                      onCheckedChange={(checked) => setAgreeToTerms(checked as boolean)} 
+                      className="mt-0.5"
+                    />
+                    <label htmlFor="terms" className="text-sm text-muted-foreground cursor-pointer leading-relaxed">
+                      I agree to the <span className="text-primary hover:underline">Terms of Service</span> and <span className="text-primary hover:underline">Privacy Policy</span>
                     </label>
                   </div>
 
-                  <Button type="submit" className="w-full h-11 bg-accent hover:bg-accent/90" disabled={isLoading}>
-                    {isLoading ? "Sending Code..." : "Create Account"}
+                  <Button type="submit" className="w-full h-11 bg-primary hover:bg-primary-dark" disabled={isLoading}>
+                    {isLoading ? "Creating account..." : "Create Account"}
                   </Button>
                 </form>
               </>
-            ) : (
-              // OTP Verification Step
-              <div className="space-y-6">
-                <button 
-                  onClick={handleBackToForm}
-                  className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span className="text-sm">Back</span>
-                </button>
-
-                <div className="text-center">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Mail className="w-8 h-8 text-primary" />
-                  </div>
-                  <h2 className="text-2xl font-bold mb-2">Verify Your Email</h2>
-                  <p className="text-sm text-muted-foreground">
-                    We've sent a 6-digit code to<br />
-                    <span className="font-medium text-foreground">{signupData.email}</span>
-                  </p>
-                </div>
-
-                <div className="flex justify-center">
-                  <InputOTP 
-                    maxLength={6} 
-                    value={otpValue} 
-                    onChange={setOtpValue}
-                  >
-                    <InputOTPGroup>
-                      <InputOTPSlot index={0} />
-                      <InputOTPSlot index={1} />
-                      <InputOTPSlot index={2} />
-                      <InputOTPSlot index={3} />
-                      <InputOTPSlot index={4} />
-                      <InputOTPSlot index={5} />
-                    </InputOTPGroup>
-                  </InputOTP>
-                </div>
-
-                <Button 
-                  onClick={handleVerifyOtp} 
-                  className="w-full h-11 bg-primary hover:bg-primary-dark" 
-                  disabled={isLoading || otpValue.length !== 6}
-                >
-                  {isLoading ? "Verifying..." : "Verify & Continue"}
-                </Button>
-
-                <div className="text-center">
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Didn't receive the code?
-                  </p>
-                  <button 
-                    onClick={handleResendOtp}
-                    disabled={resendCooldown > 0 || isLoading}
-                    className={`text-sm font-medium ${
-                      resendCooldown > 0 || isLoading
-                        ? 'text-muted-foreground cursor-not-allowed' 
-                        : 'text-primary hover:underline'
-                    }`}
-                  >
-                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
-                  </button>
-                </div>
-              </div>
             )}
           </TabsContent>
         </Tabs>

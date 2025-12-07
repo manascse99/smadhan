@@ -75,11 +75,12 @@ const Dashboard = () => {
         title: c.title,
         description: c.description,
         category: c.category,
-        location: c.location_address,
+        location: { address: c.location_address, lat: c.location_lat || 0, lng: c.location_lng || 0 },
         status: c.status,
         date: new Date(c.created_at).toLocaleDateString(),
         upvotes: c.upvotes || 0,
         hasUpvoted: false,
+        imageUrls: c.image_urls || [],
       }));
       
       setComplaints(formattedComplaints);
