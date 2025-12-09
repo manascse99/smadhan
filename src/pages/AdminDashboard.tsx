@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, LogOut, FileText, CheckCircle2, Clock, Image, Upload, X, Video, Plus } from "lucide-react";
+import { Search, LogOut, FileText, CheckCircle2, Clock, Image, Upload, X, Video, Plus, Calendar, History } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -30,6 +30,16 @@ interface Complaint {
   image_urls: string[] | null;
 }
 
+interface ComplaintUpdate {
+  id: string;
+  status: string;
+  remarks: string;
+  proof_url: string | null;
+  proof_urls: string[] | null;
+  created_at: string;
+  admin_id: string;
+}
+
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
@@ -46,6 +56,7 @@ const AdminDashboard = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [resolutionSummary, setResolutionSummary] = useState("");
   const [actionsTaken, setActionsTaken] = useState("");
+  const [previousUpdates, setPreviousUpdates] = useState<ComplaintUpdate[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -110,7 +121,7 @@ const AdminDashboard = () => {
     navigate("/auth");
   };
 
-  const handleViewDetails = (complaint: Complaint) => {
+  const handleViewDetails = async (complaint: Complaint) => {
     setSelectedComplaint(complaint);
     setNewStatus(complaint.status);
     setRemarks("");
@@ -119,7 +130,17 @@ const AdminDashboard = () => {
     setProofFiles([]);
     setProofPreviews([]);
     setUploadProgress(0);
+    setPreviousUpdates([]);
     setIsDialogOpen(true);
+    
+    // Fetch previous updates for this complaint
+    const { data: updates } = await supabase
+      .from('complaint_updates')
+      .select('*')
+      .eq('complaint_id', complaint.id)
+      .order('created_at', { ascending: false });
+    
+    setPreviousUpdates(updates || []);
   };
 
   const handleProofUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -461,6 +482,70 @@ const AdminDashboard = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Previous Updates Section */}
+                {previousUpdates.length > 0 && (
+                  <div className="space-y-4 pt-4 border-t">
+                    <div className="flex items-center gap-2">
+                      <History className="w-5 h-5 text-primary" />
+                      <h3 className="font-semibold">Previous Updates ({previousUpdates.length})</h3>
+                    </div>
+                    
+                    <div className="max-h-64 overflow-y-auto space-y-3 pr-2">
+                      {previousUpdates.map((update, index) => (
+                        <div 
+                          key={update.id} 
+                          className="p-3 bg-muted/30 rounded-lg border border-border/50"
+                        >
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <Badge className={`${getStatusColor(update.status)} text-white text-xs`}>
+                              {update.status}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {new Date(update.created_at).toLocaleDateString()} at {new Date(update.created_at).toLocaleTimeString()}
+                            </span>
+                          </div>
+                          
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-3">
+                            {update.remarks}
+                          </p>
+                          
+                          {/* Show previous proof files */}
+                          {(update.proof_urls && update.proof_urls.length > 0) || update.proof_url ? (
+                            <div className="mt-2 pt-2 border-t border-border/50">
+                              <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                                <Image className="w-3 h-3" />
+                                Proof uploaded ({update.proof_urls?.length || 1} file(s))
+                              </p>
+                              <div className="flex gap-1 flex-wrap">
+                                {(update.proof_urls || [update.proof_url]).filter(Boolean).map((url, idx) => {
+                                  const isVideo = url?.includes('.mp4') || url?.includes('.webm') || url?.includes('.mov');
+                                  return (
+                                    <div key={idx} className="w-16 h-16 rounded border overflow-hidden">
+                                      {isVideo ? (
+                                        <div className="w-full h-full bg-muted flex items-center justify-center">
+                                          <Video className="w-5 h-5 text-muted-foreground" />
+                                        </div>
+                                      ) : (
+                                        <img 
+                                          src={url!} 
+                                          alt={`Previous proof ${idx + 1}`}
+                                          className="w-full h-full object-cover cursor-pointer hover:opacity-80"
+                                          onClick={() => window.open(url!, '_blank')}
+                                        />
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-4 pt-4 border-t">
                   <div className="space-y-2">
