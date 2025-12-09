@@ -21,6 +21,7 @@ export type Database = {
           created_at: string
           id: string
           proof_url: string | null
+          proof_urls: string[] | null
           remarks: string
           status: Database["public"]["Enums"]["complaint_status"]
         }
@@ -30,6 +31,7 @@ export type Database = {
           created_at?: string
           id?: string
           proof_url?: string | null
+          proof_urls?: string[] | null
           remarks: string
           status: Database["public"]["Enums"]["complaint_status"]
         }
@@ -39,6 +41,7 @@ export type Database = {
           created_at?: string
           id?: string
           proof_url?: string | null
+          proof_urls?: string[] | null
           remarks?: string
           status?: Database["public"]["Enums"]["complaint_status"]
         }

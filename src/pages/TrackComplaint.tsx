@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, CheckCircle, Clock, Wrench, FileCheck, ThumbsUp, Image, Calendar, User } from "lucide-react";
+import { Search, CheckCircle, Clock, Wrench, FileCheck, ThumbsUp, Image, Calendar, User, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,7 @@ interface ComplaintUpdate {
   status: string;
   remarks: string;
   proof_url: string | null;
+  proof_urls: string[] | null;
   created_at: string;
   admin_id: string;
 }
@@ -358,23 +359,38 @@ const TrackComplaint = () => {
                           
                           <p className="text-sm leading-relaxed mb-3">{update.remarks}</p>
                           
-                          {/* Proof Media */}
-                          {update.proof_url && (
+                          {/* Proof Media - Multiple URLs */}
+                          {(update.proof_urls && update.proof_urls.length > 0) || update.proof_url ? (
                             <div className="mt-3 pt-3 border-t border-border">
                               <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
                                 <Image className="w-3 h-3" />
-                                Resolution Proof
+                                Resolution Proof ({update.proof_urls?.length || 1} file(s))
                               </p>
-                              <div className="rounded-lg overflow-hidden border inline-block">
-                                <img 
-                                  src={update.proof_url} 
-                                  alt="Resolution proof"
-                                  className="max-h-40 object-cover hover:scale-105 transition-transform cursor-pointer"
-                                  onClick={() => window.open(update.proof_url!, '_blank')}
-                                />
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                {(update.proof_urls || [update.proof_url]).filter(Boolean).map((url, idx) => {
+                                  const isVideo = url?.includes('.mp4') || url?.includes('.webm') || url?.includes('.mov');
+                                  return (
+                                    <div key={idx} className="rounded-lg overflow-hidden border">
+                                      {isVideo ? (
+                                        <video 
+                                          src={url!}
+                                          controls
+                                          className="w-full h-24 object-cover"
+                                        />
+                                      ) : (
+                                        <img 
+                                          src={url!} 
+                                          alt={`Resolution proof ${idx + 1}`}
+                                          className="w-full h-24 object-cover hover:scale-105 transition-transform cursor-pointer"
+                                          onClick={() => window.open(url!, '_blank')}
+                                        />
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     ))}
