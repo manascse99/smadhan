@@ -7,13 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, LogOut, FileText, CheckCircle2, Clock, Image, Upload, X } from "lucide-react";
+import { Search, LogOut, FileText, CheckCircle2, Clock, Image, Upload, X, Video, Plus } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
 
 interface Complaint {
   id: string;
@@ -39,9 +40,12 @@ const AdminDashboard = () => {
   const [remarks, setRemarks] = useState("");
   const [newStatus, setNewStatus] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
-  const [proofFile, setProofFile] = useState<File | null>(null);
-  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [proofFiles, setProofFiles] = useState<File[]>([]);
+  const [proofPreviews, setProofPreviews] = useState<{ url: string; type: string }[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [resolutionSummary, setResolutionSummary] = useState("");
+  const [actionsTaken, setActionsTaken] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -110,77 +114,117 @@ const AdminDashboard = () => {
     setSelectedComplaint(complaint);
     setNewStatus(complaint.status);
     setRemarks("");
-    setProofFile(null);
-    setProofPreview(null);
+    setResolutionSummary("");
+    setActionsTaken("");
+    setProofFiles([]);
+    setProofPreviews([]);
+    setUploadProgress(0);
     setIsDialogOpen(true);
   };
 
   const handleProofUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("File size must be less than 5MB");
+    const files = e.target.files;
+    if (!files) return;
+
+    const newFiles: File[] = [];
+    const newPreviews: { url: string; type: string }[] = [];
+
+    Array.from(files).forEach((file) => {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} is too large. Max 10MB per file.`);
         return;
       }
-      setProofFile(file);
+
+      const isVideo = file.type.startsWith('video/');
+      const isImage = file.type.startsWith('image/');
+
+      if (!isVideo && !isImage) {
+        toast.error(`${file.name} is not a valid image or video file.`);
+        return;
+      }
+
+      newFiles.push(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setProofPreview(reader.result as string);
+        newPreviews.push({
+          url: reader.result as string,
+          type: isVideo ? 'video' : 'image'
+        });
+        if (newPreviews.length === newFiles.length) {
+          setProofFiles(prev => [...prev, ...newFiles]);
+          setProofPreviews(prev => [...prev, ...newPreviews]);
+        }
       };
       reader.readAsDataURL(file);
-    }
-  };
+    });
 
-  const removeProof = () => {
-    setProofFile(null);
-    setProofPreview(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  const removeProof = (index: number) => {
+    setProofFiles(prev => prev.filter((_, i) => i !== index));
+    setProofPreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleUpdateComplaint = async () => {
     if (!selectedComplaint || !user) return;
 
     if (!remarks.trim()) {
-      toast.error("Please enter remarks");
+      toast.error("Please enter update remarks");
       return;
     }
 
     setIsUpdating(true);
     try {
-      let proofUrl: string | null = null;
+      const proofUrls: string[] = [];
 
-      // Upload proof if provided
-      if (proofFile) {
+      // Upload all proof files
+      if (proofFiles.length > 0) {
         setIsUploading(true);
-        const fileExt = proofFile.name.split('.').pop();
-        const fileName = `${selectedComplaint.id}_${Date.now()}.${fileExt}`;
-        const filePath = `proofs/${fileName}`;
+        
+        for (let i = 0; i < proofFiles.length; i++) {
+          const file = proofFiles[i];
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${selectedComplaint.id}_${Date.now()}_${i}.${fileExt}`;
+          const filePath = `proofs/${user.id}/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from('complaint-media')
-          .upload(filePath, proofFile);
+          const { error: uploadError } = await supabase.storage
+            .from('complaint-media')
+            .upload(filePath, file);
 
-        if (uploadError) {
-          console.error('Upload error:', uploadError);
-          toast.error("Failed to upload proof image");
-          setIsUploading(false);
-          setIsUpdating(false);
-          return;
+          if (uploadError) {
+            console.error('Upload error:', uploadError);
+            toast.error(`Failed to upload ${file.name}`);
+            continue;
+          }
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('complaint-media')
+            .getPublicUrl(filePath);
+
+          proofUrls.push(publicUrl);
+          setUploadProgress(Math.round(((i + 1) / proofFiles.length) * 100));
         }
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('complaint-media')
-          .getPublicUrl(filePath);
-
-        proofUrl = publicUrl;
         setIsUploading(false);
+      }
+
+      // Build full remarks with resolution details
+      let fullRemarks = remarks;
+      if (resolutionSummary.trim()) {
+        fullRemarks += `\n\n**Resolution Summary:** ${resolutionSummary}`;
+      }
+      if (actionsTaken.trim()) {
+        fullRemarks += `\n\n**Actions Taken:** ${actionsTaken}`;
       }
 
       const { error: complaintError } = await supabase
         .from('complaints')
-        .update({ status: newStatus as any })
+        .update({ 
+          status: newStatus as any,
+          resolution_date: newStatus === 'resolved' ? new Date().toISOString() : null
+        })
         .eq('id', selectedComplaint.id);
 
       if (complaintError) throw complaintError;
@@ -191,16 +235,18 @@ const AdminDashboard = () => {
           complaint_id: selectedComplaint.id,
           admin_id: user.id,
           status: newStatus as any,
-          remarks: remarks,
-          proof_url: proofUrl,
+          remarks: fullRemarks,
+          proof_url: proofUrls.length > 0 ? proofUrls[0] : null,
+          proof_urls: proofUrls.length > 0 ? proofUrls : null,
         });
 
       if (updateError) throw updateError;
 
       toast.success("Complaint updated successfully");
       setIsDialogOpen(false);
-      setProofFile(null);
-      setProofPreview(null);
+      setProofFiles([]);
+      setProofPreviews([]);
+      setUploadProgress(0);
       fetchComplaints();
     } catch (error: any) {
       console.error('Error updating complaint:', error);
@@ -433,56 +479,110 @@ const AdminDashboard = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="remarks">Remarks / Update Message *</Label>
+                    <Label htmlFor="remarks">Update Message / Remarks *</Label>
                     <Textarea
                       id="remarks"
                       placeholder="Enter update details for the citizen..."
                       value={remarks}
                       onChange={(e) => setRemarks(e.target.value)}
-                      rows={4}
+                      rows={3}
                       required
                     />
                   </div>
 
-                  {/* Proof Upload */}
                   <div className="space-y-2">
-                    <Label>Upload Proof (Optional)</Label>
-                    <p className="text-xs text-muted-foreground">Upload image proof of resolution/progress</p>
+                    <Label htmlFor="resolutionSummary">Resolution Summary (Optional)</Label>
+                    <Textarea
+                      id="resolutionSummary"
+                      placeholder="Describe what was resolved or fixed..."
+                      value={resolutionSummary}
+                      onChange={(e) => setResolutionSummary(e.target.value)}
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="actionsTaken">Actions Taken (Optional)</Label>
+                    <Textarea
+                      id="actionsTaken"
+                      placeholder="List the steps taken to resolve this issue..."
+                      value={actionsTaken}
+                      onChange={(e) => setActionsTaken(e.target.value)}
+                      rows={2}
+                    />
+                  </div>
+
+                  {/* Proof Upload Section */}
+                  <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="flex items-center gap-2">
+                          <Upload className="w-4 h-4" />
+                          Upload Proof Media (Optional)
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Upload images or videos showing resolution progress
+                        </p>
+                      </div>
+                      <Badge variant="secondary">{proofFiles.length} file(s)</Badge>
+                    </div>
                     
                     <input
                       type="file"
                       ref={fileInputRef}
                       onChange={handleProofUpload}
-                      accept="image/*"
+                      accept="image/*,video/*"
+                      multiple
                       className="hidden"
                     />
                     
-                    {!proofPreview ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full border-dashed"
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        Upload Proof Image
-                      </Button>
-                    ) : (
-                      <div className="relative inline-block">
-                        <img 
-                          src={proofPreview} 
-                          alt="Proof preview" 
-                          className="h-32 rounded-lg object-cover"
-                        />
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="icon"
-                          className="absolute -top-2 -right-2 h-6 w-6"
-                          onClick={removeProof}
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full border-dashed"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Images / Videos
+                    </Button>
+
+                    {/* Preview Grid */}
+                    {proofPreviews.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2 mt-3">
+                        {proofPreviews.map((preview, index) => (
+                          <div key={index} className="relative group">
+                            {preview.type === 'video' ? (
+                              <div className="h-24 rounded-lg bg-muted flex items-center justify-center border">
+                                <Video className="w-8 h-8 text-muted-foreground" />
+                              </div>
+                            ) : (
+                              <img 
+                                src={preview.url} 
+                                alt={`Proof ${index + 1}`} 
+                                className="h-24 w-full rounded-lg object-cover border"
+                              />
+                            )}
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="icon"
+                              className="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => removeProof(index)}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Upload Progress */}
+                    {isUploading && (
+                      <div className="space-y-2">
+                        <Progress value={uploadProgress} className="h-2" />
+                        <p className="text-xs text-muted-foreground text-center">
+                          Uploading... {uploadProgress}%
+                        </p>
                       </div>
                     )}
                   </div>
