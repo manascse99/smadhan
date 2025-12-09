@@ -37,7 +37,6 @@ const TrackComplaint = () => {
   const [searchParams] = useSearchParams();
   const initialId = searchParams.get("id") || "";
   const [complaintId, setComplaintId] = useState(initialId);
-  const [mobile, setMobile] = useState("");
   const [showResult, setShowResult] = useState(false);
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [updates, setUpdates] = useState<ComplaintUpdate[]>([]);
@@ -74,8 +73,8 @@ const TrackComplaint = () => {
     if (e) e.preventDefault();
     const idToSearch = searchId || complaintId;
     
-    if (!idToSearch && !mobile) {
-      toast.error("Please enter Complaint ID or Mobile Number");
+    if (!idToSearch) {
+      toast.error("Please enter Complaint ID");
       return;
     }
 
@@ -160,34 +159,22 @@ const TrackComplaint = () => {
           <div className="text-center mb-12">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">Track Your Complaint</h1>
             <p className="text-lg text-muted-foreground">
-              Enter your Complaint ID or Mobile Number to track status
+              Enter your Complaint ID to track status
             </p>
           </div>
 
           {/* Search Form */}
           <Card className="gradient-card shadow-xl p-8 mb-8">
             <form onSubmit={(e) => handleSearch(e)} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="complaintId">Complaint ID</Label>
-                  <Input
-                    id="complaintId"
-                    placeholder="LOK12345"
-                    value={complaintId}
-                    onChange={(e) => setComplaintId(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="mobile">Mobile Number</Label>
-                  <Input
-                    id="mobile"
-                    placeholder="9876543210"
-                    maxLength={10}
-                    value={mobile}
-                    onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="complaintId">Complaint ID</Label>
+                <Input
+                  id="complaintId"
+                  placeholder="LOK12345"
+                  value={complaintId}
+                  onChange={(e) => setComplaintId(e.target.value)}
+                  className="text-center text-lg font-mono"
+                />
               </div>
 
               <Button 
@@ -332,68 +319,83 @@ const TrackComplaint = () => {
                 </div>
               </Card>
 
-              {/* Admin Updates */}
+              {/* Admin Updates - Animated Timeline */}
               {updates.length > 0 && (
                 <Card className="gradient-card shadow-xl p-8">
                   <h2 className="text-2xl font-bold mb-6">Progress Updates</h2>
                   
-                  <div className="space-y-6">
-                    {updates.map((update, index) => (
-                      <div 
-                        key={update.id} 
-                        className={`relative pl-6 pb-6 ${index !== updates.length - 1 ? 'border-l-2 border-primary/30' : ''}`}
-                      >
-                        {/* Timeline dot */}
-                        <div className="absolute -left-2 top-0 w-4 h-4 rounded-full bg-primary shadow-lg" />
-                        
-                        <div className="bg-muted/30 rounded-lg p-4 ml-4">
-                          <div className="flex flex-wrap items-center gap-3 mb-3">
-                            <Badge className={`${getStatusColor(update.status)} text-white`}>
-                              {update.status}
-                            </Badge>
-                            <span className="text-sm text-muted-foreground flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              {new Date(update.created_at).toLocaleDateString()} at {new Date(update.created_at).toLocaleTimeString()}
-                            </span>
+                  <div className="relative">
+                    {/* Animated flow line */}
+                    <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-primary/50 to-muted/30" />
+                    
+                    <div className="space-y-8">
+                      {updates.map((update, index) => (
+                        <div 
+                          key={update.id} 
+                          className="relative pl-12 animate-fade-in"
+                          style={{ animationDelay: `${index * 150}ms` }}
+                        >
+                          {/* Animated checkmark circle */}
+                          <div className="absolute left-0 top-0 w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.5)] animate-scale-in"
+                            style={{ animationDelay: `${index * 150 + 100}ms` }}
+                          >
+                            <CheckCircle className="w-5 h-5 text-white" />
                           </div>
                           
-                          <p className="text-sm leading-relaxed mb-3">{update.remarks}</p>
+                          {/* Pulse effect */}
+                          <div className="absolute left-0 top-0 w-8 h-8 rounded-full bg-green-500/30 animate-ping" 
+                            style={{ animationDuration: '2s', animationDelay: `${index * 150}ms` }}
+                          />
                           
-                          {/* Proof Media - Multiple URLs */}
-                          {(update.proof_urls && update.proof_urls.length > 0) || update.proof_url ? (
-                            <div className="mt-3 pt-3 border-t border-border">
-                              <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                                <Image className="w-3 h-3" />
-                                Resolution Proof ({update.proof_urls?.length || 1} file(s))
-                              </p>
-                              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                {(update.proof_urls || [update.proof_url]).filter(Boolean).map((url, idx) => {
-                                  const isVideo = url?.includes('.mp4') || url?.includes('.webm') || url?.includes('.mov');
-                                  return (
-                                    <div key={idx} className="rounded-lg overflow-hidden border">
-                                      {isVideo ? (
-                                        <video 
-                                          src={url!}
-                                          controls
-                                          className="w-full h-24 object-cover"
-                                        />
-                                      ) : (
-                                        <img 
-                                          src={url!} 
-                                          alt={`Resolution proof ${idx + 1}`}
-                                          className="w-full h-24 object-cover hover:scale-105 transition-transform cursor-pointer"
-                                          onClick={() => window.open(url!, '_blank')}
-                                        />
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                          <div className="bg-muted/30 rounded-lg p-4 border border-border/50 hover:border-primary/30 transition-colors">
+                            <div className="flex flex-wrap items-center gap-3 mb-3">
+                              <Badge className={`${getStatusColor(update.status)} text-white`}>
+                                {update.status}
+                              </Badge>
+                              <span className="text-sm text-muted-foreground flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {new Date(update.created_at).toLocaleDateString()} at {new Date(update.created_at).toLocaleTimeString()}
+                              </span>
                             </div>
-                          ) : null}
+                            
+                            <p className="text-sm leading-relaxed mb-3 whitespace-pre-wrap">{update.remarks}</p>
+                            
+                            {/* Proof Media - Multiple URLs */}
+                            {(update.proof_urls && update.proof_urls.length > 0) || update.proof_url ? (
+                              <div className="mt-3 pt-3 border-t border-border">
+                                <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                                  <Image className="w-3 h-3" />
+                                  Resolution Proof ({update.proof_urls?.length || 1} file(s))
+                                </p>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                  {(update.proof_urls || [update.proof_url]).filter(Boolean).map((url, idx) => {
+                                    const isVideo = url?.includes('.mp4') || url?.includes('.webm') || url?.includes('.mov');
+                                    return (
+                                      <div key={idx} className="rounded-lg overflow-hidden border group">
+                                        {isVideo ? (
+                                          <video 
+                                            src={url!}
+                                            controls
+                                            className="w-full h-24 object-cover"
+                                          />
+                                        ) : (
+                                          <img 
+                                            src={url!} 
+                                            alt={`Resolution proof ${idx + 1}`}
+                                            className="w-full h-24 object-cover group-hover:scale-105 transition-transform cursor-pointer"
+                                            onClick={() => window.open(url!, '_blank')}
+                                          />
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </Card>
               )}
