@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, CheckCircle, Clock, Wrench, FileCheck, ThumbsUp, Image, Calendar, User, Video } from "lucide-react";
+import { Search, CheckCircle, Clock, Wrench, FileCheck, ThumbsUp, Image, Calendar, User, Video, AlertTriangle, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,7 +45,7 @@ const TrackComplaint = () => {
   const [progressWidth, setProgressWidth] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
-  const statusOrder = ["filed", "verified", "processing", "resolved"];
+  const statusOrder = ["filed", "verified", "processing", "escalated", "fund_required", "resolved"];
 
   const timeline = [
     { status: "filed", label: "Filed", icon: FileCheck },
@@ -53,6 +53,18 @@ const TrackComplaint = () => {
     { status: "processing", label: "In Process", icon: Wrench },
     { status: "resolved", label: "Resolved", icon: Clock },
   ];
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "filed": return "Filed";
+      case "verified": return "Verified";
+      case "processing": return "In Progress";
+      case "resolved": return "Resolved";
+      case "escalated": return "Escalated to Higher Authority";
+      case "fund_required": return "Fund Required";
+      default: return status;
+    }
+  };
 
   useEffect(() => {
     if (initialId) {
@@ -145,8 +157,30 @@ const TrackComplaint = () => {
       case "verified": return "bg-status-verified";
       case "processing": return "bg-status-processing";
       case "resolved": return "bg-status-resolved";
+      case "escalated": return "bg-orange-500";
+      case "fund_required": return "bg-purple-500";
       default: return "bg-muted";
     }
+  };
+
+  const getSpecialStatusInfo = (status: string) => {
+    if (status === "escalated") {
+      return {
+        icon: AlertTriangle,
+        label: "Escalated to Higher Authority",
+        description: "This complaint has been escalated to higher authorities for resolution.",
+        color: "bg-orange-500/10 border-orange-500/30 text-orange-600"
+      };
+    }
+    if (status === "fund_required") {
+      return {
+        icon: Wallet,
+        label: "Fund Required",
+        description: "This complaint requires additional funding for resolution.",
+        color: "bg-purple-500/10 border-purple-500/30 text-purple-600"
+      };
+    }
+    return null;
   };
 
   return (
@@ -192,6 +226,29 @@ const TrackComplaint = () => {
           {/* Results */}
           {showResult && complaint && (
             <div className="space-y-8 animate-fade-in">
+              {/* Special Status Banner */}
+              {getSpecialStatusInfo(complaint.status) && (
+                <Card className={`p-6 border-2 ${getSpecialStatusInfo(complaint.status)!.color}`}>
+                  <div className="flex items-center gap-4">
+                    {(() => {
+                      const info = getSpecialStatusInfo(complaint.status)!;
+                      const Icon = info.icon;
+                      return (
+                        <>
+                          <div className="w-12 h-12 rounded-full bg-current/10 flex items-center justify-center">
+                            <Icon className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-lg">{info.label}</h3>
+                            <p className="text-sm opacity-80">{info.description}</p>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </Card>
+              )}
+
               {/* Status Timeline */}
               <Card className="gradient-card shadow-xl p-8">
                 <h2 className="text-2xl font-bold mb-8 text-center">Complaint Status</h2>
@@ -209,9 +266,13 @@ const TrackComplaint = () => {
                   <div className="relative grid grid-cols-4 gap-4">
                     {timeline.map((step, index) => {
                       const Icon = step.icon;
-                      const statusIndex = statusOrder.indexOf(complaint.status);
-                      const isCompleted = index <= statusIndex;
-                      const isActive = index === statusIndex;
+                      const currentStatusIndex = statusOrder.indexOf(complaint.status);
+                      // Map escalated/fund_required to processing level for timeline display
+                      const effectiveStatusIndex = complaint.status === "escalated" || complaint.status === "fund_required" 
+                        ? statusOrder.indexOf("processing") 
+                        : currentStatusIndex;
+                      const isCompleted = index <= effectiveStatusIndex;
+                      const isActive = index === effectiveStatusIndex;
 
                       return (
                         <div key={index} className="flex flex-col items-center gap-3">
@@ -263,7 +324,7 @@ const TrackComplaint = () => {
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Current Status</p>
                       <Badge className={`${getStatusColor(complaint.status)} text-white`}>
-                        {complaint.status}
+                        {getStatusLabel(complaint.status)}
                       </Badge>
                     </div>
                   </div>
