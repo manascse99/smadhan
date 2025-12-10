@@ -284,7 +284,13 @@ export type Database = {
         | "Healthcare"
         | "Education"
         | "Other"
-      complaint_status: "filed" | "verified" | "processing" | "resolved"
+      complaint_status:
+        | "filed"
+        | "verified"
+        | "processing"
+        | "resolved"
+        | "escalated"
+        | "fund_required"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -423,7 +429,14 @@ export const Constants = {
         "Education",
         "Other",
       ],
-      complaint_status: ["filed", "verified", "processing", "resolved"],
+      complaint_status: [
+        "filed",
+        "verified",
+        "processing",
+        "resolved",
+        "escalated",
+        "fund_required",
+      ],
     },
   },
 } as const

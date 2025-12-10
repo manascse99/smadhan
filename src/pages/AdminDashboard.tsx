@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, LogOut, FileText, CheckCircle2, Clock, Image, Upload, X, Video, Plus, Calendar, History } from "lucide-react";
+import { Search, LogOut, FileText, CheckCircle2, Clock, Image, Upload, X, Video, Plus, Calendar, History, User, AlertTriangle, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -284,7 +284,21 @@ const AdminDashboard = () => {
       case "verified": return "bg-status-verified";
       case "processing": return "bg-status-processing";
       case "resolved": return "bg-status-resolved";
+      case "escalated": return "bg-orange-500";
+      case "fund_required": return "bg-purple-500";
       default: return "bg-muted";
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "filed": return "Filed";
+      case "verified": return "Verified";
+      case "processing": return "In Progress";
+      case "resolved": return "Resolved";
+      case "escalated": return "Escalated";
+      case "fund_required": return "Fund Required";
+      default: return status;
     }
   };
 
@@ -303,10 +317,16 @@ const AdminDashboard = () => {
               Managing: <span className="font-semibold text-primary">{complaints.length} Complaints</span>
             </p>
           </div>
-          <Button onClick={handleLogout} variant="outline">
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => navigate('/admin-profile')} variant="outline">
+              <User className="w-4 h-4 mr-2" />
+              Profile
+            </Button>
+            <Button onClick={handleLogout} variant="outline">
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -345,12 +365,12 @@ const AdminDashboard = () => {
           <Card className="gradient-card p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Verified</p>
+                <p className="text-sm text-muted-foreground mb-1">Escalated</p>
                 <p className="text-3xl font-bold">
-                  {complaints.filter((c) => c.status === "verified").length}
+                  {complaints.filter((c) => c.status === "escalated" || c.status === "fund_required").length}
                 </p>
               </div>
-              <div className="w-8 h-8 rounded-full bg-status-urgent flex items-center justify-center text-white font-bold">
+              <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold">
                 !
               </div>
             </div>
@@ -401,7 +421,7 @@ const AdminDashboard = () => {
                     </td>
                     <td className="px-6 py-4">
                       <Badge className={`${getStatusColor(complaint.status)} text-white`}>
-                        {complaint.status}
+                        {getStatusLabel(complaint.status)}
                       </Badge>
                     </td>
                     <td className="px-6 py-4">
@@ -477,7 +497,7 @@ const AdminDashboard = () => {
                     <div>
                       <Label className="text-muted-foreground">Current Status</Label>
                       <Badge className={`${getStatusColor(selectedComplaint.status)} text-white`}>
-                        {selectedComplaint.status}
+                        {getStatusLabel(selectedComplaint.status)}
                       </Badge>
                     </div>
                   </div>
@@ -499,7 +519,7 @@ const AdminDashboard = () => {
                         >
                           <div className="flex flex-wrap items-center gap-2 mb-2">
                             <Badge className={`${getStatusColor(update.status)} text-white text-xs`}>
-                              {update.status}
+                              {getStatusLabel(update.status)}
                             </Badge>
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <Calendar className="w-3 h-3" />
@@ -551,14 +571,46 @@ const AdminDashboard = () => {
                   <div className="space-y-2">
                     <Label htmlFor="status">Update Status</Label>
                     <Select value={newStatus} onValueChange={setNewStatus}>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-background">
                         <SelectValue placeholder="Select new status" />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="filed">Filed</SelectItem>
-                        <SelectItem value="verified">Verified</SelectItem>
-                        <SelectItem value="processing">Processing</SelectItem>
-                        <SelectItem value="resolved">Resolved</SelectItem>
+                      <SelectContent className="bg-background border shadow-lg z-50">
+                        <SelectItem value="filed">
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-status-filed" />
+                            <span>Filed</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="verified">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-status-verified" />
+                            <span>Verified</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="processing">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-status-processing" />
+                            <span>In Progress</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="escalated">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 text-orange-500" />
+                            <span>Escalated (Higher Authority)</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="fund_required">
+                          <div className="flex items-center gap-2">
+                            <Wallet className="w-4 h-4 text-purple-500" />
+                            <span>Fund Required</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="resolved">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-status-resolved" />
+                            <span>Resolved</span>
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
