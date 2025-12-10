@@ -21,30 +21,19 @@ const Dashboard = () => {
   const [complaints, setComplaints] = useState<any[]>([]);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [departments, setDepartments] = useState<{ name: string }[]>([]);
+  const [statusData, setStatusData] = useState([
+    { status: "Filed", count: 0, percentage: 0, color: "status-filed" },
+    { status: "Verified", count: 0, percentage: 0, color: "status-verified" },
+    { status: "Processing", count: 0, percentage: 0, color: "status-processing" },
+    { status: "Resolved", count: 0, percentage: 0, color: "status-resolved" },
+  ]);
 
   const stats = [
     { label: "Total Filed", value: complaints.length, icon: FileText, color: "primary" },
     { label: "Resolved", value: complaints.filter(c => c.status === 'resolved').length, icon: CheckCircle, color: "secondary" },
     { label: "Pending", value: complaints.filter(c => c.status === 'filed' || c.status === 'verified').length, icon: Clock, color: "accent" },
     { label: "In Progress", value: complaints.filter(c => c.status === 'processing').length, icon: TrendingUp, color: "destructive" },
-  ];
-
-  const departmentData = [
-    { name: "Water Supply", count: 520, resolved: 420 },
-    { name: "Road & Transport", count: 480, resolved: 380 },
-    { name: "Electricity", count: 420, resolved: 350 },
-    { name: "Waste Management", count: 380, resolved: 320 },
-    { name: "Public Health", count: 340, resolved: 290 },
-    { name: "Education", count: 280, resolved: 240 },
-    { name: "Law & Order", count: 240, resolved: 180 },
-    { name: "Corruption", count: 187, resolved: 176 },
-  ];
-
-  const statusData = [
-    { status: "Filed", count: 542, percentage: 19, color: "status-filed" },
-    { status: "Verified", count: 420, percentage: 15, color: "status-verified" },
-    { status: "Processing", count: 729, percentage: 26, color: "status-processing" },
-    { status: "Resolved", count: 1156, percentage: 40, color: "status-resolved" },
   ];
 
   useEffect(() => {
@@ -55,7 +44,22 @@ const Dashboard = () => {
     }
     getUserLocation();
     fetchUserComplaints();
-  }, [isAuthenticated, navigate]);
+    fetchDepartments();
+  }, [isAuthenticated, navigate, user]);
+
+  const fetchDepartments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('departments')
+        .select('name')
+        .order('name');
+
+      if (error) throw error;
+      setDepartments(data || []);
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+    }
+  };
 
   const fetchUserComplaints = async () => {
     if (!user) return;
@@ -84,6 +88,21 @@ const Dashboard = () => {
       }));
       
       setComplaints(formattedComplaints);
+
+      // Calculate status distribution
+      const total = formattedComplaints.length || 1;
+      const filed = formattedComplaints.filter(c => c.status === 'filed').length;
+      const verified = formattedComplaints.filter(c => c.status === 'verified').length;
+      const processing = formattedComplaints.filter(c => c.status === 'processing').length;
+      const resolved = formattedComplaints.filter(c => c.status === 'resolved').length;
+
+      setStatusData([
+        { status: "Filed", count: filed, percentage: Math.round((filed / total) * 100), color: "status-filed" },
+        { status: "Verified", count: verified, percentage: Math.round((verified / total) * 100), color: "status-verified" },
+        { status: "Processing", count: processing, percentage: Math.round((processing / total) * 100), color: "status-processing" },
+        { status: "Resolved", count: resolved, percentage: Math.round((resolved / total) * 100), color: "status-resolved" },
+      ]);
+
     } catch (error: any) {
       console.error('Error fetching complaints:', error);
       toast.error("Failed to load your complaints");
@@ -115,14 +134,51 @@ const Dashboard = () => {
     }
   };
 
-  const handleUpvote = (complaintId: string) => {
-    setComplaints(prev => 
-      prev.map(complaint => 
-        complaint.id === complaintId 
-          ? { ...complaint, hasUpvoted: !complaint.hasUpvoted }
-          : complaint
-      )
-    );
+  const handleUpvote = async (complaintId: string) => {
+    if (!user) {
+      toast.error("Please login to upvote");
+      return;
+    }
+
+    const complaint = complaints.find(c => c.id === complaintId);
+    if (!complaint) return;
+
+    try {
+      if (complaint.hasUpvoted) {
+        // Remove upvote
+        await supabase
+          .from('complaint_upvotes')
+          .delete()
+          .eq('complaint_id', complaintId)
+          .eq('user_id', user.id);
+
+        await supabase
+          .from('complaints')
+          .update({ upvotes: Math.max(0, complaint.upvotes - 1) })
+          .eq('id', complaintId);
+      } else {
+        // Add upvote
+        await supabase
+          .from('complaint_upvotes')
+          .insert({ complaint_id: complaintId, user_id: user.id });
+
+        await supabase
+          .from('complaints')
+          .update({ upvotes: complaint.upvotes + 1 })
+          .eq('id', complaintId);
+      }
+
+      setComplaints(prev => 
+        prev.map(c => 
+          c.id === complaintId 
+            ? { ...c, hasUpvoted: !c.hasUpvoted, upvotes: c.hasUpvoted ? c.upvotes - 1 : c.upvotes + 1 }
+            : c
+        )
+      );
+    } catch (error) {
+      console.error('Error updating upvote:', error);
+      toast.error("Failed to update upvote");
+    }
   };
 
   const filteredComplaints = complaints.filter(complaint => {
@@ -173,7 +229,7 @@ const Dashboard = () => {
                 </SelectTrigger>
                 <SelectContent className="bg-background">
                   <SelectItem value="all">All Departments</SelectItem>
-                  {departmentData.map((dept) => (
+                  {departments.map((dept) => (
                     <SelectItem key={dept.name} value={dept.name}>
                       {dept.name}
                     </SelectItem>
