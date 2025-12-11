@@ -9,11 +9,12 @@ export interface Complaint {
     lng: number;
   };
   upvotes: number;
-  status: 'filed' | 'verified' | 'processing' | 'resolved';
+  status: 'filed' | 'verified' | 'processing' | 'resolved' | 'escalated' | 'fund_required';
   date: string;
   imageUrl?: string;
   imageUrls?: string[];
   hasUpvoted?: boolean;
+  satisfactionRating?: number | null;
 }
 
 export const mockComplaints: Complaint[] = [

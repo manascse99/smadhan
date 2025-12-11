@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, LogOut, FileText, CheckCircle2, Clock, Image, Upload, X, Video, Plus, Calendar, History, User, AlertTriangle, Wallet } from "lucide-react";
+import { Search, LogOut, FileText, CheckCircle2, Clock, Image, Upload, X, Video, Plus, Calendar, History, User, AlertTriangle, Wallet, Star } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -28,6 +28,7 @@ interface Complaint {
   department_id: string | null;
   assigned_to: string | null;
   image_urls: string[] | null;
+  satisfaction_rating: number | null;
 }
 
 interface ComplaintUpdate {
@@ -330,7 +331,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <Card className="gradient-card p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -375,6 +376,28 @@ const AdminDashboard = () => {
               </div>
             </div>
           </Card>
+          <Card className="gradient-card p-6 border-2 border-yellow-500/20">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Avg. Satisfaction</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-3xl font-bold">
+                    {(() => {
+                      const rated = complaints.filter(c => c.satisfaction_rating);
+                      if (rated.length === 0) return "-";
+                      const avg = rated.reduce((sum, c) => sum + (c.satisfaction_rating || 0), 0) / rated.length;
+                      return avg.toFixed(1);
+                    })()}
+                  </p>
+                  <span className="text-sm text-muted-foreground">/5</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {complaints.filter(c => c.satisfaction_rating).length} ratings
+                </p>
+              </div>
+              <Star className="w-8 h-8 text-yellow-500 fill-yellow-500" />
+            </div>
+          </Card>
         </div>
 
         {/* Search */}
@@ -401,6 +424,7 @@ const AdminDashboard = () => {
                   <th className="px-6 py-4 text-left text-sm font-semibold">Location</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold">Date</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold">Status</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold">Satisfaction</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold">Action</th>
                 </tr>
               </thead>
@@ -423,6 +447,26 @@ const AdminDashboard = () => {
                       <Badge className={`${getStatusColor(complaint.status)} text-white`}>
                         {getStatusLabel(complaint.status)}
                       </Badge>
+                    </td>
+                    <td className="px-6 py-4">
+                      {complaint.satisfaction_rating ? (
+                        <div className="flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              className={`w-4 h-4 ${
+                                star <= complaint.satisfaction_rating! 
+                                  ? "fill-yellow-400 text-yellow-400" 
+                                  : "text-muted-foreground/30"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      ) : complaint.status === 'resolved' ? (
+                        <span className="text-xs text-muted-foreground">Pending</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <Button

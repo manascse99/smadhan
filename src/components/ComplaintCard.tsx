@@ -1,20 +1,29 @@
 import { useState } from "react";
-import { MapPin, ThumbsUp, Calendar, Hash, Eye, Image } from "lucide-react";
+import { MapPin, ThumbsUp, Calendar, Hash, Eye, Image, Star } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Complaint } from "@/types/complaint";
 import { toast } from "sonner";
+import { SatisfactionSurvey } from "./SatisfactionSurvey";
 
 interface ComplaintCardProps {
   complaint: Complaint;
   onUpvote: (id: string) => void;
+  onFeedbackSubmit?: () => void;
 }
 
-export const ComplaintCard = ({ complaint, onUpvote }: ComplaintCardProps) => {
+export const ComplaintCard = ({ complaint, onUpvote, onFeedbackSubmit }: ComplaintCardProps) => {
   const [isUpvoted, setIsUpvoted] = useState(complaint.hasUpvoted || false);
   const [upvoteCount, setUpvoteCount] = useState(complaint.upvotes);
   const [showDetails, setShowDetails] = useState(false);
+  const [showSurvey, setShowSurvey] = useState(false);
+  const [hasSubmittedFeedback, setHasSubmittedFeedback] = useState(
+    complaint.satisfactionRating !== undefined && complaint.satisfactionRating !== null
+  );
+
+  const isResolved = complaint.status === 'resolved';
+  const needsFeedback = isResolved && !hasSubmittedFeedback;
 
   const handleUpvote = () => {
     if (isUpvoted) {
@@ -29,11 +38,19 @@ export const ComplaintCard = ({ complaint, onUpvote }: ComplaintCardProps) => {
     onUpvote(complaint.id);
   };
 
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     filed: "status-filed",
     verified: "status-verified",
     processing: "status-processing",
-    resolved: "status-resolved"
+    resolved: "status-resolved",
+    escalated: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+    fund_required: "bg-purple-500/10 text-purple-600 border-purple-500/20"
+  };
+
+  const handleFeedbackSubmit = () => {
+    setHasSubmittedFeedback(true);
+    setShowSurvey(false);
+    onFeedbackSubmit?.();
   };
 
   // Get all images (support both imageUrl and imageUrls)
@@ -128,6 +145,58 @@ export const ComplaintCard = ({ complaint, onUpvote }: ComplaintCardProps) => {
               </Button>
             </div>
           </div>
+
+          {/* Satisfaction Survey for Resolved Complaints */}
+          {needsFeedback && !showSurvey && (
+            <div className="mt-4 p-3 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-lg border border-green-500/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Star className="w-5 h-5 text-green-600" />
+                  <p className="text-sm font-medium text-green-700">Your complaint is resolved!</p>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowSurvey(true);
+                  }}
+                  className="gap-1 border-green-500/30 hover:bg-green-500/10"
+                >
+                  Rate Experience
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Show satisfaction rating if already submitted */}
+          {hasSubmittedFeedback && complaint.satisfactionRating && (
+            <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Your rating:</span>
+                <div className="flex gap-0.5">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`w-4 h-4 ${
+                        star <= complaint.satisfactionRating! 
+                          ? "fill-yellow-400 text-yellow-400" 
+                          : "text-muted-foreground/30"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Inline Survey */}
+          {showSurvey && (
+            <SatisfactionSurvey 
+              complaintId={complaint.id} 
+              onSubmit={handleFeedbackSubmit}
+            />
+          )}
         </div>
       </Card>
 
