@@ -150,6 +150,26 @@ const FileComplaint = () => {
         }
       }
 
+      // Send confirmation email
+      try {
+        await supabase.functions.invoke('send-complaint-confirmation', {
+          body: {
+            email: formData.email,
+            name: formData.fullName,
+            complaintId: data.id,
+            title: formData.title,
+            category: formData.category,
+            description: formData.description,
+            location: formData.location,
+            department: formData.category, // Department name matches category
+          }
+        });
+        console.log('Confirmation email sent');
+      } catch (emailError) {
+        console.error('Failed to send confirmation email:', emailError);
+        // Don't fail the submission if email fails
+      }
+
       toast.success(`Complaint submitted successfully! Tracking ID: ${data.id}`);
       navigate('/dashboard');
     } catch (error: any) {

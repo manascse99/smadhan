@@ -80,11 +80,12 @@ const Dashboard = () => {
         description: c.description,
         category: c.category,
         location: { address: c.location_address, lat: c.location_lat || 0, lng: c.location_lng || 0 },
-        status: c.status,
+        status: c.status as any,
         date: new Date(c.created_at).toLocaleDateString(),
         upvotes: c.upvotes || 0,
         hasUpvoted: false,
         imageUrls: c.image_urls || [],
+        satisfactionRating: c.satisfaction_rating,
       }));
       
       setComplaints(formattedComplaints);
@@ -351,6 +352,7 @@ const Dashboard = () => {
                     key={complaint.id} 
                     complaint={complaint}
                     onUpvote={handleUpvote}
+                    onFeedbackSubmit={fetchUserComplaints}
                   />
                 ))}
               </div>
