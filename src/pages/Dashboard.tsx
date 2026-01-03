@@ -86,6 +86,8 @@ const Dashboard = () => {
         hasUpvoted: false,
         imageUrls: c.image_urls || [],
         satisfactionRating: c.satisfaction_rating,
+        priority: (c as any).priority as 'low' | 'medium' | 'high' | 'critical' | null,
+        slaDeadline: (c as any).sla_deadline as string | null,
       }));
       
       setComplaints(formattedComplaints);

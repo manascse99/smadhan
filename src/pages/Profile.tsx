@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { User, MapPin, Calendar, CheckCircle, Clock, FileText, TrendingUp, Award } from "lucide-react";
+import { User, MapPin, Calendar, CheckCircle, Clock, FileText, TrendingUp, Award, Settings } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,6 +11,7 @@ import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import LanguageSelector from "@/components/LanguageSelector";
 
 interface UserComplaint {
   id: string;
@@ -147,11 +148,15 @@ const Profile = () => {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-3">
                 <Button onClick={() => navigate("/file-complaint")} className="shadow-md">
                   <FileText className="w-4 h-4 mr-2" />
                   File New Complaint
                 </Button>
+                <div className="flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-muted-foreground" />
+                  <LanguageSelector />
+                </div>
               </div>
             </div>
           </Card>

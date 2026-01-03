@@ -15,6 +15,8 @@ export interface Complaint {
   imageUrls?: string[];
   hasUpvoted?: boolean;
   satisfactionRating?: number | null;
+  priority?: 'low' | 'medium' | 'high' | 'critical' | null;
+  slaDeadline?: string | null;
 }
 
 export const mockComplaints: Complaint[] = [
