@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import NotificationBell from "@/components/NotificationBell";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -98,6 +99,7 @@ const Navbar = () => {
 
           {/* Desktop Auth Section */}
           <div className="hidden md:flex items-center gap-3">
+            {isLoggedIn && <NotificationBell />}
             {isLoggedIn ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

@@ -15,6 +15,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
+import OfficerMetricsCard from "@/components/OfficerMetricsCard";
+import { sendNotification, getStatusNotificationMessage } from "@/utils/notifications";
 
 interface Complaint {
   id: string;
@@ -264,6 +266,16 @@ const AdminDashboard = () => {
 
       if (updateError) throw updateError;
 
+      // Send notification to the user
+      const notificationContent = getStatusNotificationMessage(newStatus, selectedComplaint.title);
+      await sendNotification(
+        selectedComplaint.user_id,
+        notificationContent.title,
+        notificationContent.message,
+        notificationContent.type,
+        selectedComplaint.id
+      );
+
       toast.success("Complaint updated successfully");
       setIsDialogOpen(false);
       setProofFiles([]);
@@ -398,6 +410,11 @@ const AdminDashboard = () => {
               <Star className="w-8 h-8 text-yellow-500 fill-yellow-500" />
             </div>
           </Card>
+        </div>
+
+        {/* Officer Performance Metrics */}
+        <div className="mb-8">
+          <OfficerMetricsCard />
         </div>
 
         {/* Search */}

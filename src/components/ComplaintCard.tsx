@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Complaint } from "@/types/complaint";
 import { toast } from "sonner";
 import { SatisfactionSurvey } from "./SatisfactionSurvey";
+import SLAIndicator from "./SLAIndicator";
+import PriorityBadge from "./PriorityBadge";
 
 interface ComplaintCardProps {
   complaint: Complaint;
@@ -88,15 +90,21 @@ export const ComplaintCard = ({ complaint, onUpvote, onFeedbackSubmit }: Complai
               <h3 className="font-bold text-lg mb-2">{complaint.title}</h3>
               <p className="text-sm text-muted-foreground line-clamp-2">{complaint.description}</p>
             </div>
-            <span className={`status-badge ${statusColors[complaint.status]}`}>
-              {complaint.status}
-            </span>
+            <div className="flex flex-col gap-2 items-end">
+              <span className={`status-badge ${statusColors[complaint.status]}`}>
+                {complaint.status}
+              </span>
+              {complaint.priority && <PriorityBadge priority={complaint.priority} showLabel={false} />}
+            </div>
           </div>
 
-          {/* Category */}
-          <div className="flex items-center gap-2 text-sm">
-            <Hash className="w-4 h-4 text-muted-foreground" />
-            <span className="font-medium text-primary">{complaint.category}</span>
+          {/* Category & SLA */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm">
+              <Hash className="w-4 h-4 text-muted-foreground" />
+              <span className="font-medium text-primary">{complaint.category}</span>
+            </div>
+            <SLAIndicator slaDeadline={complaint.slaDeadline || null} status={complaint.status} compact />
           </div>
 
           {/* Location */}
