@@ -16,7 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import OfficerMetricsCard from "@/components/OfficerMetricsCard";
-import { sendNotification, getStatusNotificationMessage } from "@/utils/notifications";
+import { sendStatusNotification } from "@/utils/notifications";
 
 interface Complaint {
   id: string;
@@ -266,14 +266,30 @@ const AdminDashboard = () => {
 
       if (updateError) throw updateError;
 
-      // Send notification to the user
-      const notificationContent = getStatusNotificationMessage(newStatus, selectedComplaint.title);
-      await sendNotification(
+      // Fetch user details to send notification with email
+      const { data: userData } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', selectedComplaint.user_id)
+        .single();
+
+      const { data: adminData } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+
+      // Send notification to the user (both in-app and email)
+      await sendStatusNotification(
+        selectedComplaint.id,
         selectedComplaint.user_id,
-        notificationContent.title,
-        notificationContent.message,
-        notificationContent.type,
-        selectedComplaint.id
+        userData?.email || '',
+        userData?.full_name || 'Citizen',
+        selectedComplaint.title,
+        selectedComplaint.status,
+        newStatus,
+        fullRemarks,
+        adminData?.full_name || 'Admin'
       );
 
       toast.success("Complaint updated successfully");

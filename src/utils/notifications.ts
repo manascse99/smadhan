@@ -30,6 +30,44 @@ export async function sendNotification(
   }
 }
 
+export async function sendStatusNotification(
+  complaintId: string,
+  userId: string,
+  userEmail: string,
+  userName: string,
+  complaintTitle: string,
+  oldStatus: string,
+  newStatus: string,
+  remarks?: string,
+  adminName?: string
+) {
+  try {
+    const { error } = await supabase.functions.invoke("send-status-notification", {
+      body: {
+        complaint_id: complaintId,
+        user_id: userId,
+        user_email: userEmail,
+        user_name: userName,
+        complaint_title: complaintTitle,
+        old_status: oldStatus,
+        new_status: newStatus,
+        remarks,
+        admin_name: adminName,
+      },
+    });
+
+    if (error) {
+      console.error("Error sending status notification:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error invoking status notification function:", error);
+    return false;
+  }
+}
+
 export function getStatusNotificationMessage(
   status: string,
   complaintTitle: string
