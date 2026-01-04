@@ -4,7 +4,7 @@ import { User, MapPin, Calendar, CheckCircle, Clock, FileText, TrendingUp, Award
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import LanguageSelector from "@/components/LanguageSelector";
+import EditProfileDialog from "@/components/EditProfileDialog";
 
 interface UserComplaint {
   id: string;
@@ -29,6 +30,13 @@ const Profile = () => {
   const [upvotesCount, setUpvotesCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [memberSince, setMemberSince] = useState("");
+  const [profileData, setProfileData] = useState<{
+    full_name: string;
+    email: string;
+    department: string | null;
+    position: string | null;
+    avatar_url: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -73,17 +81,18 @@ const Profile = () => {
       if (upvotesError) throw upvotesError;
       setUpvotesCount(upvotes || 0);
 
-      // Fetch profile for member since date
-      const { data: profileData, error: profileError } = await supabase
+      // Fetch profile for member since date and other data
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('created_at')
+        .select('*')
         .eq('id', user.id)
         .single();
 
       if (profileError && profileError.code !== 'PGRST116') throw profileError;
       
-      if (profileData) {
-        const date = new Date(profileData.created_at);
+      if (profile) {
+        setProfileData(profile);
+        const date = new Date(profile.created_at);
         setMemberSince(date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }));
       }
 
@@ -128,14 +137,15 @@ const Profile = () => {
           <Card className="gradient-card shadow-xl p-8 mb-8">
             <div className="flex flex-col md:flex-row items-center gap-6">
               <Avatar className="w-24 h-24 border-4 border-primary shadow-lg">
+                <AvatarImage src={profileData?.avatar_url || ""} alt={profileData?.full_name || "User"} />
                 <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-bold">
-                  {user?.fullName ? getInitials(user.fullName) : "U"}
+                  {profileData?.full_name ? getInitials(profileData.full_name) : user?.fullName ? getInitials(user.fullName) : "U"}
                 </AvatarFallback>
               </Avatar>
               
               <div className="flex-1 text-center md:text-left">
-                <h1 className="text-3xl font-bold mb-2">{user?.fullName || "User"}</h1>
-                <p className="text-muted-foreground mb-3">{user?.email}</p>
+                <h1 className="text-3xl font-bold mb-2">{profileData?.full_name || user?.fullName || "User"}</h1>
+                <p className="text-muted-foreground mb-3">{profileData?.email || user?.email}</p>
                 <div className="flex flex-wrap gap-2 justify-center md:justify-start">
                   <Badge variant="secondary" className="text-sm">
                     <User className="w-3 h-3 mr-1" />
@@ -153,6 +163,10 @@ const Profile = () => {
                   <FileText className="w-4 h-4 mr-2" />
                   File New Complaint
                 </Button>
+                <EditProfileDialog 
+                  profileData={profileData} 
+                  onProfileUpdated={fetchUserData} 
+                />
                 <div className="flex items-center gap-2">
                   <Settings className="w-4 h-4 text-muted-foreground" />
                   <LanguageSelector />

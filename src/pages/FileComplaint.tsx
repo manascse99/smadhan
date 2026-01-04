@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Upload, Send, X, User, Mail, Phone } from "lucide-react";
+import { Upload, Send, X, User, Mail, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card } from "@/components/ui/card";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import LocationPicker from "@/components/LocationPicker";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,6 +25,8 @@ const FileComplaint = () => {
     category: "",
     description: "",
     location: "",
+    locationLat: undefined as number | undefined,
+    locationLng: undefined as number | undefined,
   });
   const [images, setImages] = useState<File[]>([]);
   const [charCount, setCharCount] = useState(0);
@@ -132,6 +135,8 @@ const FileComplaint = () => {
           description: `Contact: ${formData.fullName} | Phone: ${formData.mobile} | Email: ${formData.email}\n\n${formData.description}`,
           category: formData.category as any,
           location_address: formData.location,
+          location_lat: formData.locationLat || null,
+          location_lng: formData.locationLng || null,
         }])
         .select()
         .single();
@@ -301,17 +306,17 @@ const FileComplaint = () => {
               {/* Location */}
               <div className="space-y-2">
                 <Label htmlFor="location">Location *</Label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="location"
-                    placeholder="Enter location of the issue"
-                    value={formData.location}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    className="pl-10"
-                    required
-                  />
-                </div>
+                <LocationPicker
+                  value={formData.location}
+                  onChange={(address, lat, lng) => 
+                    setFormData({ 
+                      ...formData, 
+                      location: address, 
+                      locationLat: lat, 
+                      locationLng: lng 
+                    })
+                  }
+                />
               </div>
 
               {/* Image Upload (Optional) */}

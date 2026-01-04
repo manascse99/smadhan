@@ -1,4 +1,4 @@
-import { Bell, Check, CheckCheck, Clock, AlertTriangle, Info, FileText } from "lucide-react";
+import { Bell, Check, CheckCheck, Clock, AlertTriangle, Info, FileText, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,7 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNotifications, Notification } from "@/hooks/useNotifications";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 
 const NotificationBell = () => {
@@ -124,6 +124,15 @@ const NotificationBell = () => {
             ))
           )}
         </ScrollArea>
+        <DropdownMenuSeparator />
+        <div className="p-2">
+          <Button asChild variant="outline" className="w-full" size="sm">
+            <Link to="/notifications">
+              <ExternalLink className="w-4 h-4 mr-2" />
+              View All Notifications
+            </Link>
+          </Button>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -23,9 +23,8 @@ export const useNotifications = () => {
     if (!user) return;
 
     try {
-      // Use type assertion since the table was just created
       const { data, error } = await supabase
-        .from("notifications" as any)
+        .from("notifications")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
@@ -56,8 +55,8 @@ export const useNotifications = () => {
   const markAsRead = async (notificationId: string) => {
     try {
       const { error } = await supabase
-        .from("notifications" as any)
-        .update({ is_read: true } as any)
+        .from("notifications")
+        .update({ is_read: true })
         .eq("id", notificationId);
 
       if (error) throw error;
@@ -78,8 +77,8 @@ export const useNotifications = () => {
 
     try {
       const { error } = await supabase
-        .from("notifications" as any)
-        .update({ is_read: true } as any)
+        .from("notifications")
+        .update({ is_read: true })
         .eq("user_id", user.id)
         .eq("is_read", false);
 

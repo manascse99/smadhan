@@ -16,11 +16,13 @@ import {
   Star,
   Award,
   FileText,
-  Calendar
+  Calendar,
+  User
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import EditProfileDialog from "@/components/EditProfileDialog";
 
 interface AdminComplaint {
   id: string;
@@ -219,6 +221,12 @@ export default function AdminProfile() {
                     <Calendar className="h-4 w-4 text-primary" />
                     Joined {memberSince}
                   </span>
+                </div>
+                <div className="mt-4">
+                  <EditProfileDialog 
+                    profileData={profileData} 
+                    onProfileUpdated={fetchAdminData} 
+                  />
                 </div>
               </div>
             </div>
