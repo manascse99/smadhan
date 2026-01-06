@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, LogOut, FileText, CheckCircle2, Clock, Image, Upload, X, Video, Plus, Calendar, History, User, AlertTriangle, Wallet, Star } from "lucide-react";
+import { Search, LogOut, FileText, CheckCircle2, Clock, Image, Upload, X, Video, Plus, Calendar, History, User, AlertTriangle, Wallet, Star, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -17,6 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import OfficerMetricsCard from "@/components/OfficerMetricsCard";
 import { sendStatusNotification } from "@/utils/notifications";
+import ComplaintsMap from "@/components/ComplaintsMap";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Complaint {
   id: string;
@@ -69,6 +71,29 @@ const AdminDashboard = () => {
       return;
     }
     fetchComplaints();
+
+    // Set up real-time subscription for complaints
+    const channel = supabase
+      .channel('admin-dashboard-complaints')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'complaints' },
+        () => {
+          fetchComplaints();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'complaint_updates' },
+        () => {
+          fetchComplaints();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [isAuthenticated, navigate]);
 
   const fetchComplaints = async () => {
@@ -433,18 +458,36 @@ const AdminDashboard = () => {
           <OfficerMetricsCard />
         </div>
 
-        {/* Search */}
-        <div className="mb-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-            <Input
-              placeholder="Search by ID, title, or location..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </div>
+        {/* Map and Search Tabs */}
+        <Tabs defaultValue="list" className="mb-8">
+          <TabsList className="grid w-full grid-cols-2 max-w-md">
+            <TabsTrigger value="list" className="gap-2">
+              <FileText className="w-4 h-4" />
+              List View
+            </TabsTrigger>
+            <TabsTrigger value="map" className="gap-2">
+              <MapPin className="w-4 h-4" />
+              Map View
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="map" className="mt-6">
+            <ComplaintsMap />
+          </TabsContent>
+          
+          <TabsContent value="list" className="mt-6">
+            {/* Search */}
+            <div className="mb-6">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
+                <Input
+                  placeholder="Search by ID, title, or location..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
 
         {/* Complaints Table */}
         <Card className="gradient-card shadow-xl overflow-hidden">
@@ -516,6 +559,8 @@ const AdminDashboard = () => {
             </table>
           </div>
         </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* Update Progress Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

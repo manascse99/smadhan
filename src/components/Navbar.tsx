@@ -111,7 +111,12 @@ const Navbar = () => {
                     </Avatar>
                     <div className="flex flex-col items-start">
                       <span className="text-sm font-medium">{currentUser?.fullName}</span>
-                      <span className="text-xs text-muted-foreground">{isAdmin ? "Admin" : "Citizen"}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {isAdmin ? "Administrator" : 
+                          currentUser?.role === 'officer' ? "Officer" : 
+                          currentUser?.role === 'government' ? "Government Official" : 
+                          "Citizen"}
+                      </span>
                     </div>
                   </Button>
                 </DropdownMenuTrigger>
@@ -174,7 +179,12 @@ const Navbar = () => {
                     </Avatar>
                     <div>
                       <p className="font-medium text-sm">{currentUser.fullName}</p>
-                      <p className="text-xs text-muted-foreground">{isAdmin ? "Admin" : "Citizen"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {isAdmin ? "Administrator" : 
+                          currentUser?.role === 'officer' ? "Officer" : 
+                          currentUser?.role === 'government' ? "Government Official" : 
+                          "Citizen"}
+                      </p>
                     </div>
                   </div>
                 </div>

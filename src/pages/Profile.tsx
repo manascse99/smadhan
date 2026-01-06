@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { User, MapPin, Calendar, CheckCircle, Clock, FileText, TrendingUp, Award, Settings } from "lucide-react";
+import { User, MapPin, Calendar, CheckCircle, Clock, FileText, TrendingUp, Award } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,7 +11,6 @@ import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import LanguageSelector from "@/components/LanguageSelector";
 import EditProfileDialog from "@/components/EditProfileDialog";
 
 interface UserComplaint {
@@ -123,6 +122,16 @@ const Profile = () => {
     }
   };
 
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case "citizen": return "Citizen";
+      case "officer": return "Officer";
+      case "admin": return "Administrator";
+      case "government": return "Government Official";
+      default: return role;
+    }
+  };
+
   const filedComplaints = complaints.filter(c => c.status === "filed");
   const processingComplaints = complaints.filter(c => c.status === "processing" || c.status === "verified");
   const resolvedComplaints = complaints.filter(c => c.status === "resolved");
@@ -149,7 +158,7 @@ const Profile = () => {
                 <div className="flex flex-wrap gap-2 justify-center md:justify-start">
                   <Badge variant="secondary" className="text-sm">
                     <User className="w-3 h-3 mr-1" />
-                    {user?.role || "Citizen"}
+                    {getRoleLabel(user?.role || "citizen")}
                   </Badge>
                   <Badge variant="outline" className="text-sm">
                     <Calendar className="w-3 h-3 mr-1" />
@@ -165,12 +174,9 @@ const Profile = () => {
                 </Button>
                 <EditProfileDialog 
                   profileData={profileData} 
-                  onProfileUpdated={fetchUserData} 
+                  onProfileUpdated={fetchUserData}
+                  showPosition={false}
                 />
-                <div className="flex items-center gap-2">
-                  <Settings className="w-4 h-4 text-muted-foreground" />
-                  <LanguageSelector />
-                </div>
               </div>
             </div>
           </Card>
