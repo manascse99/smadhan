@@ -67,6 +67,29 @@ export default function AdminProfile() {
       return;
     }
     fetchAdminData();
+
+    // Set up real-time subscription for complaints
+    const channel = supabase
+      .channel('admin-profile-complaints')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'complaints' },
+        () => {
+          fetchAdminData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'complaint_updates' },
+        () => {
+          fetchAdminData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [isAuthenticated, navigate, user]);
 
   const fetchAdminData = async () => {
@@ -84,68 +107,110 @@ export default function AdminProfile() {
       if (profileError && profileError.code !== 'PGRST116') throw profileError;
       setProfileData(profile);
 
-      // Fetch complaints assigned to or updated by this admin
-      const { data: updatesData, error: updatesError } = await supabase
+      // Get department ID for the admin's department
+      let departmentId: string | null = null;
+      if (profile?.department) {
+        const { data: dept } = await supabase
+          .from('departments')
+          .select('id')
+          .eq('name', profile.department)
+          .single();
+        departmentId = dept?.id || null;
+      }
+
+      // Fetch complaints - include those where admin made updates, OR assigned to them, OR in their department
+      const { data: updatesData } = await supabase
         .from('complaint_updates')
         .select('complaint_id')
         .eq('admin_id', user.id);
 
-      if (updatesError) throw updatesError;
+      const updatedComplaintIds = [...new Set((updatesData || []).map(u => u.complaint_id))];
 
-      const complaintIds = [...new Set((updatesData || []).map(u => u.complaint_id))];
+      // Build query for all related complaints
+      let allComplaints: AdminComplaint[] = [];
 
-      if (complaintIds.length > 0) {
-        const { data: complaintsData, error: complaintsError } = await supabase
+      // Get complaints where admin made updates
+      if (updatedComplaintIds.length > 0) {
+        const { data: complaintsFromUpdates } = await supabase
           .from('complaints')
-          .select('*')
-          .in('id', complaintIds)
-          .order('created_at', { ascending: false });
-
-        if (complaintsError) throw complaintsError;
-        setComplaints(complaintsData || []);
-
-        // Calculate stats
-        const total = complaintsData?.length || 0;
-        const resolved = complaintsData?.filter(c => c.status === 'resolved').length || 0;
-        const processing = complaintsData?.filter(c => c.status === 'processing').length || 0;
-        const filed = complaintsData?.filter(c => c.status === 'filed' || c.status === 'verified').length || 0;
-
-        // Calculate average satisfaction
-        const ratingsData = complaintsData?.filter(c => c.satisfaction_rating !== null) || [];
-        const avgSatisfaction = ratingsData.length > 0 
-          ? ratingsData.reduce((sum, c) => sum + (c.satisfaction_rating || 0), 0) / ratingsData.length 
-          : 0;
-
-        // Calculate average resolution time
-        const resolvedComplaints = complaintsData?.filter(c => c.resolution_date) || [];
-        let avgDays = "N/A";
-        if (resolvedComplaints.length > 0) {
-          const totalDays = resolvedComplaints.reduce((sum, c) => {
-            const created = new Date(c.created_at);
-            const resolved = new Date(c.resolution_date!);
-            return sum + Math.ceil((resolved.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
-          }, 0);
-          avgDays = `${(totalDays / resolvedComplaints.length).toFixed(1)} days`;
+          .select('id, title, status, category, created_at, resolution_date, satisfaction_rating')
+          .in('id', updatedComplaintIds);
+        
+        if (complaintsFromUpdates) {
+          allComplaints.push(...complaintsFromUpdates);
         }
-
-        // Monthly completed (this month)
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const monthlyResolved = complaintsData?.filter(c => 
-          c.resolution_date && new Date(c.resolution_date) >= monthStart
-        ).length || 0;
-
-        setStats({
-          totalHandled: total,
-          resolved,
-          inProgress: processing,
-          pending: filed,
-          monthlyTarget: 50,
-          monthlyCompleted: monthlyResolved,
-          satisfactionRate: Number(avgSatisfaction.toFixed(1)),
-          avgResolutionTime: avgDays,
-        });
       }
+
+      // Get complaints assigned to this admin
+      const { data: assignedComplaints } = await supabase
+        .from('complaints')
+        .select('id, title, status, category, created_at, resolution_date, satisfaction_rating')
+        .eq('assigned_to', user.id);
+
+      if (assignedComplaints) {
+        allComplaints.push(...assignedComplaints);
+      }
+
+      // Get complaints from admin's department
+      if (departmentId) {
+        const { data: deptComplaints } = await supabase
+          .from('complaints')
+          .select('id, title, status, category, created_at, resolution_date, satisfaction_rating')
+          .eq('department_id', departmentId);
+
+        if (deptComplaints) {
+          allComplaints.push(...deptComplaints);
+        }
+      }
+
+      // Remove duplicates based on complaint ID
+      const uniqueComplaints = Array.from(
+        new Map(allComplaints.map(c => [c.id, c])).values()
+      ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      setComplaints(uniqueComplaints);
+
+      // Calculate stats
+      const total = uniqueComplaints.length;
+      const resolved = uniqueComplaints.filter(c => c.status === 'resolved').length;
+      const processing = uniqueComplaints.filter(c => c.status === 'processing').length;
+      const filed = uniqueComplaints.filter(c => c.status === 'filed' || c.status === 'verified').length;
+
+      // Calculate average satisfaction
+      const ratingsData = uniqueComplaints.filter(c => c.satisfaction_rating !== null);
+      const avgSatisfaction = ratingsData.length > 0 
+        ? ratingsData.reduce((sum, c) => sum + (c.satisfaction_rating || 0), 0) / ratingsData.length 
+        : 0;
+
+      // Calculate average resolution time
+      const resolvedComplaints = uniqueComplaints.filter(c => c.resolution_date);
+      let avgDays = "N/A";
+      if (resolvedComplaints.length > 0) {
+        const totalDays = resolvedComplaints.reduce((sum, c) => {
+          const created = new Date(c.created_at);
+          const resolvedDate = new Date(c.resolution_date!);
+          return sum + Math.ceil((resolvedDate.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+        }, 0);
+        avgDays = `${(totalDays / resolvedComplaints.length).toFixed(1)} days`;
+      }
+
+      // Monthly completed (this month)
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthlyResolved = uniqueComplaints.filter(c => 
+        c.resolution_date && new Date(c.resolution_date) >= monthStart
+      ).length;
+
+      setStats({
+        totalHandled: total,
+        resolved,
+        inProgress: processing,
+        pending: filed,
+        monthlyTarget: 50,
+        monthlyCompleted: monthlyResolved,
+        satisfactionRate: Number(avgSatisfaction.toFixed(1)),
+        avgResolutionTime: avgDays,
+      });
     } catch (error: any) {
       console.error('Error fetching admin data:', error);
       toast.error("Failed to load profile data");
@@ -172,8 +237,24 @@ export default function AdminProfile() {
         return "bg-status-verified text-white";
       case "filed":
         return "bg-status-filed text-white";
+      case "escalated":
+        return "bg-orange-500 text-white";
+      case "fund_required":
+        return "bg-purple-500 text-white";
       default:
         return "bg-muted text-muted-foreground";
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "filed": return "Filed";
+      case "verified": return "Verified";
+      case "processing": return "In Progress";
+      case "resolved": return "Resolved";
+      case "escalated": return "Escalated";
+      case "fund_required": return "Fund Required";
+      default: return status;
     }
   };
 
@@ -207,7 +288,7 @@ export default function AdminProfile() {
                     {isLoading ? "Loading..." : profileData?.full_name || user?.fullName || "Admin"}
                   </h1>
                   <Badge className="bg-accent text-accent-foreground w-fit mx-auto md:mx-0">
-                    Admin Officer
+                    Administrator
                   </Badge>
                 </div>
                 <p className="text-muted-foreground mb-2">{profileData?.email || user?.email}</p>
@@ -225,7 +306,8 @@ export default function AdminProfile() {
                 <div className="mt-4">
                   <EditProfileDialog 
                     profileData={profileData} 
-                    onProfileUpdated={fetchAdminData} 
+                    onProfileUpdated={fetchAdminData}
+                    showPosition={true}
                   />
                 </div>
               </div>
@@ -407,23 +489,25 @@ export default function AdminProfile() {
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2">
                                 <h3 className="font-semibold text-foreground">{complaint.title}</h3>
-                                <Badge className={getStatusColor(complaint.status)}>{complaint.status}</Badge>
+                                <Badge className={getStatusColor(complaint.status)}>{getStatusLabel(complaint.status)}</Badge>
                               </div>
                               <p className="text-sm text-muted-foreground mb-2">ID: {complaint.id}</p>
                               <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
                                 <span>Submitted: {new Date(complaint.created_at).toLocaleDateString('en-IN')}</span>
-                                {complaint.resolution_date && (
-                                  <span>Resolved: {new Date(complaint.resolution_date).toLocaleDateString('en-IN')}</span>
-                                )}
+                                <span>Category: {complaint.category}</span>
                                 {complaint.satisfaction_rating && (
                                   <span className="flex items-center gap-1">
-                                    <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
+                                    <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
                                     {complaint.satisfaction_rating}/5
                                   </span>
                                 )}
                               </div>
                             </div>
-                            <Button onClick={() => navigate("/admin/dashboard")}>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => navigate(`/track-complaint?id=${complaint.id}`)}
+                            >
                               View Details
                             </Button>
                           </div>
@@ -434,77 +518,80 @@ export default function AdminProfile() {
                 )}
               </TabsContent>
 
-              <TabsContent value="resolved" className="space-y-3 mt-6">
+              <TabsContent value="resolved" className="space-y-4 mt-6">
                 {resolvedComplaints.length === 0 ? (
                   <div className="text-center py-12">
                     <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                    <p className="text-muted-foreground">No resolved complaints</p>
+                    <p className="text-muted-foreground">No resolved complaints yet</p>
                   </div>
                 ) : (
-                  resolvedComplaints.map((complaint) => (
-                    <Card key={complaint.id} className="hover:shadow-md transition-shadow">
-                      <CardContent className="pt-6">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <h3 className="font-semibold text-foreground">{complaint.title}</h3>
-                              {complaint.satisfaction_rating && (
-                                <span className="flex items-center gap-1 text-sm">
-                                  <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
-                                  {complaint.satisfaction_rating}/5
-                                </span>
-                              )}
+                  <div className="space-y-3">
+                    {resolvedComplaints.map((complaint) => (
+                      <Card key={complaint.id} className="hover:shadow-md transition-shadow">
+                        <CardContent className="pt-6">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h3 className="font-semibold text-foreground">{complaint.title}</h3>
+                                <Badge className={getStatusColor(complaint.status)}>{getStatusLabel(complaint.status)}</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">ID: {complaint.id}</p>
                             </div>
-                            <p className="text-sm text-muted-foreground">ID: {complaint.id}</p>
-                            <p className="text-sm text-muted-foreground">
-                              Resolved: {complaint.resolution_date 
-                                ? new Date(complaint.resolution_date).toLocaleDateString('en-IN')
-                                : "N/A"}
-                            </p>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => navigate(`/track-complaint?id=${complaint.id}`)}
+                            >
+                              View Details
+                            </Button>
                           </div>
-                          <Button onClick={() => navigate("/admin/dashboard")}>
-                            View Details
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 )}
               </TabsContent>
 
-              <TabsContent value="progress" className="space-y-3 mt-6">
+              <TabsContent value="progress" className="space-y-4 mt-6">
                 {processingComplaints.length === 0 ? (
                   <div className="text-center py-12">
                     <Clock className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
                     <p className="text-muted-foreground">No complaints in progress</p>
                   </div>
                 ) : (
-                  processingComplaints.map((complaint) => (
-                    <Card key={complaint.id} className="hover:shadow-md transition-shadow">
-                      <CardContent className="pt-6">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <h3 className="font-semibold text-foreground">{complaint.title}</h3>
+                  <div className="space-y-3">
+                    {processingComplaints.map((complaint) => (
+                      <Card key={complaint.id} className="hover:shadow-md transition-shadow">
+                        <CardContent className="pt-6">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h3 className="font-semibold text-foreground">{complaint.title}</h3>
+                                <Badge className={getStatusColor(complaint.status)}>{getStatusLabel(complaint.status)}</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">ID: {complaint.id}</p>
                             </div>
-                            <p className="text-sm text-muted-foreground">ID: {complaint.id}</p>
-                            <p className="text-sm text-muted-foreground">
-                              Submitted: {new Date(complaint.created_at).toLocaleDateString('en-IN')}
-                            </p>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => navigate(`/track-complaint?id=${complaint.id}`)}
+                            >
+                              View Details
+                            </Button>
                           </div>
-                          <Button onClick={() => navigate("/admin/dashboard")}>
-                            Manage
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 )}
               </TabsContent>
 
-              <TabsContent value="pending" className="mt-6">
+              <TabsContent value="pending" className="space-y-4 mt-6">
                 {pendingComplaints.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No pending complaints</p>
+                  <div className="text-center py-12">
+                    <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                    <p className="text-muted-foreground">No pending complaints</p>
+                  </div>
                 ) : (
                   <div className="space-y-3">
                     {pendingComplaints.map((complaint) => (
@@ -514,15 +601,16 @@ export default function AdminProfile() {
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2">
                                 <h3 className="font-semibold text-foreground">{complaint.title}</h3>
-                                <Badge className={getStatusColor(complaint.status)}>{complaint.status}</Badge>
+                                <Badge className={getStatusColor(complaint.status)}>{getStatusLabel(complaint.status)}</Badge>
                               </div>
                               <p className="text-sm text-muted-foreground">ID: {complaint.id}</p>
-                              <p className="text-sm text-muted-foreground">
-                                Submitted: {new Date(complaint.created_at).toLocaleDateString('en-IN')}
-                              </p>
                             </div>
-                            <Button onClick={() => navigate("/admin/dashboard")}>
-                              Manage
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => navigate(`/track-complaint?id=${complaint.id}`)}
+                            >
+                              View Details
                             </Button>
                           </div>
                         </CardContent>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { User, Mail, Building, Briefcase, Camera, Loader2 } from "lucide-react";
+import { User, Mail, Building, Briefcase, Camera, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,13 +20,15 @@ interface ProfileData {
 interface EditProfileDialogProps {
   profileData: ProfileData | null;
   onProfileUpdated: () => void;
+  showPosition?: boolean;
 }
 
-const EditProfileDialog = ({ profileData, onProfileUpdated }: EditProfileDialogProps) => {
+const EditProfileDialog = ({ profileData, onProfileUpdated, showPosition = true }: EditProfileDialogProps) => {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [formData, setFormData] = useState({
     full_name: profileData?.full_name || "",
     department: profileData?.department || "",
@@ -86,6 +88,32 @@ const EditProfileDialog = ({ profileData, onProfileUpdated }: EditProfileDialogP
     }
   };
 
+  const handleRemovePhoto = async () => {
+    if (!user || !formData.avatar_url) return;
+
+    setIsDeleting(true);
+
+    try {
+      // Extract file path from URL
+      const urlParts = formData.avatar_url.split('/');
+      const filePath = `${user.id}/${urlParts[urlParts.length - 1]}`;
+
+      // Delete from storage
+      await supabase.storage
+        .from("complaint-media")
+        .remove([filePath]);
+
+      // Update form data
+      setFormData({ ...formData, avatar_url: "" });
+      toast.success("Profile picture removed!");
+    } catch (error: any) {
+      console.error("Delete error:", error);
+      toast.error("Failed to remove image");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!user) return;
 
@@ -97,7 +125,7 @@ const EditProfileDialog = ({ profileData, onProfileUpdated }: EditProfileDialogP
         .update({
           full_name: formData.full_name,
           department: formData.department || null,
-          position: formData.position || null,
+          position: showPosition ? (formData.position || null) : null,
           avatar_url: formData.avatar_url || null,
         })
         .eq("id", user.id);
@@ -170,7 +198,28 @@ const EditProfileDialog = ({ profileData, onProfileUpdated }: EditProfileDialogP
                 disabled={isUploading}
               />
             </div>
-            <p className="text-sm text-muted-foreground">Click the camera icon to upload a photo</p>
+            <div className="flex gap-2">
+              <p className="text-sm text-muted-foreground">Click the camera icon to upload</p>
+              {formData.avatar_url && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRemovePhoto}
+                  disabled={isDeleting}
+                  className="text-destructive hover:text-destructive"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Remove
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Full Name */}
@@ -218,20 +267,22 @@ const EditProfileDialog = ({ profileData, onProfileUpdated }: EditProfileDialogP
             </div>
           </div>
 
-          {/* Position */}
-          <div className="space-y-2">
-            <Label htmlFor="position">Position</Label>
-            <div className="relative">
-              <Briefcase className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-              <Input
-                id="position"
-                value={formData.position}
-                onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                className="pl-10"
-                placeholder="Enter your position"
-              />
+          {/* Position - Only show for admin users */}
+          {showPosition && (
+            <div className="space-y-2">
+              <Label htmlFor="position">Position</Label>
+              <div className="relative">
+                <Briefcase className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="position"
+                  value={formData.position}
+                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                  className="pl-10"
+                  placeholder="Enter your position"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-3 pt-4">
