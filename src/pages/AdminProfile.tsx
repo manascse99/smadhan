@@ -66,6 +66,15 @@ export default function AdminProfile() {
       navigate("/auth");
       return;
     }
+
+    if (!user) return;
+
+    if (user.role !== "admin" && user.role !== "officer") {
+      toast.error("Access denied");
+      navigate("/dashboard");
+      return;
+    }
+
     fetchAdminData();
 
     // Set up real-time subscription for complaints

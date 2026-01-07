@@ -1,9 +1,8 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Scale, Menu, X, LayoutDashboard, LogOut, User } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { RoleBadge } from "@/components/RoleBadge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,35 +20,42 @@ const Navbar = () => {
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
 
-  // Check for admin session
-  const adminSession = localStorage.getItem("admin_session");
-  const adminData = adminSession ? JSON.parse(adminSession) : null;
-  const isAdmin = !!adminData;
-  const currentUser = isAdmin ? { fullName: `${adminData.department} Admin`, role: "admin" } : user;
-  const isLoggedIn = isAuthenticated || isAdmin;
+  const isLoggedIn = isAuthenticated && !!user;
+  const isAdminUser = user?.role === "admin" || user?.role === "officer";
+
+  const dashboardPath = isAdminUser ? "/admin/dashboard" : "/dashboard";
+  const profilePath = isAdminUser ? "/admin/profile" : "/profile";
 
   const isActive = (path: string) => location.pathname === path;
 
-  const handleLogout = () => {
-    if (isAdmin) {
-      localStorage.removeItem("admin_session");
-      navigate("/auth");
-    } else {
-      logout();
-      navigate("/");
-    }
+  const handleLogout = async () => {
+    await logout();
     setIsOpen(false);
+    navigate("/auth");
   };
 
-  const getUserInitials = () => {
-    if (!currentUser?.fullName) return "U";
-    return currentUser.fullName
+  const getUserInitials = useMemo(() => {
+    if (!user?.fullName) return "U";
+    return user.fullName
       .split(" ")
       .map((n) => n[0])
       .join("")
       .toUpperCase()
       .slice(0, 2);
-  };
+  }, [user?.fullName]);
+
+  const roleLabel = useMemo(() => {
+    switch (user?.role) {
+      case "admin":
+        return "Administrator";
+      case "officer":
+        return "Officer";
+      case "government":
+        return "Government Official";
+      default:
+        return "Citizen";
+    }
+  }, [user?.role]);
 
   const navLinks = [
     { path: "/", label: "Home" },
@@ -65,11 +71,9 @@ const Navbar = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 font-bold text-xl">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-md">
-              <Scale className="w-6 h-6 text-white" />
+              <Scale className="w-6 h-6 text-primary-foreground" />
             </div>
-            <span className="hidden sm:inline text-primary">
-              Lok Samadhan
-            </span>
+            <span className="hidden sm:inline text-primary">Lok Samadhan</span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -85,11 +89,10 @@ const Navbar = () => {
                 {link.label}
               </Link>
             ))}
-            
-            {/* Dashboard Link */}
+
             {isLoggedIn && (
               <Button asChild variant="ghost" size="sm" className="gap-2">
-                <Link to={isAdmin ? "/admin/dashboard" : "/dashboard"}>
+                <Link to={dashboardPath}>
                   <LayoutDashboard className="w-4 h-4" />
                   Dashboard
                 </Link>
@@ -100,23 +103,19 @@ const Navbar = () => {
           {/* Desktop Auth Section */}
           <div className="hidden md:flex items-center gap-3">
             {isLoggedIn && <NotificationBell />}
+
             {isLoggedIn ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="gap-2 h-10">
                     <Avatar className="w-8 h-8">
-                      <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white text-sm font-semibold shadow-lg">
-                        {getUserInitials()}
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-primary-foreground text-sm font-semibold shadow-lg">
+                        {getUserInitials}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col items-start">
-                      <span className="text-sm font-medium">{currentUser?.fullName}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {isAdmin ? "Administrator" : 
-                          currentUser?.role === 'officer' ? "Officer" : 
-                          currentUser?.role === 'government' ? "Government Official" : 
-                          "Citizen"}
-                      </span>
+                      <span className="text-sm font-medium">{user?.fullName}</span>
+                      <span className="text-xs text-muted-foreground">{roleLabel}</span>
                     </div>
                   </Button>
                 </DropdownMenuTrigger>
@@ -124,13 +123,13 @@ const Navbar = () => {
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link to={isAdmin ? "/admin/dashboard" : "/dashboard"} className="cursor-pointer">
+                    <Link to={dashboardPath} className="cursor-pointer">
                       <LayoutDashboard className="w-4 h-4 mr-2" />
                       Dashboard
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link to={isAdmin ? "/admin/profile" : "/profile"} className="cursor-pointer">
+                    <Link to={profilePath} className="cursor-pointer">
                       <User className="w-4 h-4 mr-2" />
                       Profile
                     </Link>
@@ -168,28 +167,22 @@ const Navbar = () => {
         {isOpen && (
           <div className="md:hidden py-4 border-t border-border animate-fade-in">
             <div className="flex flex-col gap-3">
-              {/* User Info (Mobile) */}
-              {isLoggedIn && currentUser && (
+              {isLoggedIn && user && (
                 <div className="px-4 pb-3 border-b border-border">
                   <div className="flex items-center gap-3">
                     <Avatar className="w-10 h-10">
-                      <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold shadow-lg">
-                        {getUserInitials()}
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-primary-foreground font-semibold shadow-lg">
+                        {getUserInitials}
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-medium text-sm">{currentUser.fullName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {isAdmin ? "Administrator" : 
-                          currentUser?.role === 'officer' ? "Officer" : 
-                          currentUser?.role === 'government' ? "Government Official" : 
-                          "Citizen"}
-                      </p>
+                      <p className="font-medium text-sm">{user.fullName}</p>
+                      <p className="text-xs text-muted-foreground">{roleLabel}</p>
                     </div>
                   </div>
                 </div>
               )}
-              
+
               {navLinks.map((link) => (
                 <Link
                   key={link.path}
@@ -204,15 +197,14 @@ const Navbar = () => {
                   {link.label}
                 </Link>
               ))}
-              
-              {/* Dashboard Link (Mobile) */}
+
               {isLoggedIn && (
                 <>
                   <Link
-                    to={isAdmin ? "/admin/dashboard" : "/dashboard"}
+                    to={dashboardPath}
                     onClick={() => setIsOpen(false)}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                      isActive(isAdmin ? "/admin/dashboard" : "/dashboard")
+                      isActive(dashboardPath)
                         ? "bg-primary text-primary-foreground"
                         : "hover:bg-muted"
                     }`}
@@ -221,10 +213,10 @@ const Navbar = () => {
                     Dashboard
                   </Link>
                   <Link
-                    to={isAdmin ? "/admin/profile" : "/profile"}
+                    to={profilePath}
                     onClick={() => setIsOpen(false)}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                      isActive(isAdmin ? "/admin/profile" : "/profile")
+                      isActive(profilePath)
                         ? "bg-primary text-primary-foreground"
                         : "hover:bg-muted"
                     }`}
@@ -234,7 +226,7 @@ const Navbar = () => {
                   </Link>
                 </>
               )}
-              
+
               <div className="flex flex-col gap-2 px-4 pt-2 border-t border-border mt-2">
                 {isLoggedIn ? (
                   <Button onClick={handleLogout} variant="outline" size="sm" className="w-full gap-2">
