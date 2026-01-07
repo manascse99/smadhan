@@ -47,7 +47,7 @@ interface ComplaintUpdate {
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
@@ -70,21 +70,25 @@ const AdminDashboard = () => {
       navigate("/auth");
       return;
     }
+
+    if (!user) return;
+
+    if (user.role !== "admin" && user.role !== "officer") {
+      toast.error("Access denied");
+      navigate("/dashboard");
+      return;
+    }
+
     fetchComplaints();
 
-    // Set up real-time subscription for complaints
     const channel = supabase
-      .channel('admin-dashboard-complaints')
+      .channel("admin-dashboard-complaints")
+      .on("postgres_changes", { event: "*", schema: "public", table: "complaints" }, () => {
+        fetchComplaints();
+      })
       .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'complaints' },
-        () => {
-          fetchComplaints();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'complaint_updates' },
+        "postgres_changes",
+        { event: "*", schema: "public", table: "complaint_updates" },
         () => {
           fetchComplaints();
         }
@@ -94,7 +98,7 @@ const AdminDashboard = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, user]);
 
   const fetchComplaints = async () => {
     try {
@@ -144,7 +148,7 @@ const AdminDashboard = () => {
   );
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await logout();
     toast.success("Logged out successfully");
     navigate("/auth");
   };
@@ -372,7 +376,7 @@ const AdminDashboard = () => {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => navigate('/admin-profile')} variant="outline">
+            <Button onClick={() => navigate('/admin/profile')} variant="outline">
               <User className="w-4 h-4 mr-2" />
               Profile
             </Button>
@@ -472,7 +476,7 @@ const AdminDashboard = () => {
           </TabsList>
           
           <TabsContent value="map" className="mt-6">
-            <ComplaintsMap />
+            <ComplaintsMap complaints={complaints as any} />
           </TabsContent>
           
           <TabsContent value="list" className="mt-6">
