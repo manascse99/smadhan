@@ -1,10 +1,9 @@
+/// <reference types="google.maps" />
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import mapboxgl from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, X } from "lucide-react";
+import { MapPin, X, Loader2 } from "lucide-react";
 
 interface Complaint {
   id: string;
@@ -34,45 +33,54 @@ const statusLabels: Record<string, string> = {
   fund_required: "Fund Required",
 };
 
+declare global {
+  interface Window {
+    initGoogleMapsCallback: () => void;
+  }
+}
+
 type Props = {
   complaints?: Complaint[];
 };
 
 const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const markersRef = useRef<google.maps.Marker[]>([]);
 
   const [complaints, setComplaints] = useState<Complaint[]>(externalComplaints || []);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
-  const [mapboxToken, setMapboxToken] = useState<string>("");
+  const [apiKey, setApiKey] = useState<string>("");
   const [mapError, setMapError] = useState<string | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Keep local complaints in sync when parent passes them
   useEffect(() => {
     if (externalComplaints) setComplaints(externalComplaints);
   }, [externalComplaints]);
 
-  // Fetch token from backend function
+  // Fetch API key from backend function
   useEffect(() => {
-    const loadToken = async () => {
+    const loadApiKey = async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("get-mapbox-token");
+        const { data, error } = await supabase.functions.invoke("get-google-maps-token");
         if (error) throw error;
-        const token = (data as any)?.token as string | undefined;
-        if (!token) {
-          setMapError("Map token is not configured.");
+        const key = data?.apiKey as string | undefined;
+        if (!key) {
+          setMapError("Google Maps API key is not configured.");
+          setIsLoading(false);
           return;
         }
-        setMapboxToken(token);
+        setApiKey(key);
       } catch (e) {
-        console.error("Failed to load map token", e);
-        setMapError("Map token is not configured.");
+        console.error("Failed to load Google Maps API key", e);
+        setMapError("Google Maps API key is not configured.");
+        setIsLoading(false);
       }
     };
 
-    loadToken();
+    loadApiKey();
   }, []);
 
   // If no complaints are passed, fetch all complaints with coordinates
@@ -105,66 +113,117 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
     };
   }, [externalComplaints]);
 
-  // Init map once
+  // Load Google Maps script
   useEffect(() => {
-    if (!mapContainer.current || !mapboxToken || map.current) return;
+    if (!apiKey) return;
 
-    mapboxgl.accessToken = mapboxToken;
+    // Check if already loaded
+    if (window.google?.maps) {
+      setIsMapLoaded(true);
+      setIsLoading(false);
+      return;
+    }
+
+    // Check if script is already being loaded
+    const existingScript = document.getElementById("google-maps-script");
+    if (existingScript) {
+      return;
+    }
+
+    window.initGoogleMapsCallback = () => {
+      setIsMapLoaded(true);
+      setIsLoading(false);
+    };
+
+    const script = document.createElement("script");
+    script.id = "google-maps-script";
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initGoogleMapsCallback`;
+    script.async = true;
+    script.defer = true;
+    script.onerror = () => {
+      setMapError("Failed to load Google Maps. Please check your API key.");
+      setIsLoading(false);
+    };
+    document.head.appendChild(script);
+
+    return () => {
+      // Cleanup callback
+      delete (window as any).initGoogleMapsCallback;
+    };
+  }, [apiKey]);
+
+  // Initialize map once Google Maps is loaded
+  useEffect(() => {
+    if (!mapContainer.current || !isMapLoaded || mapRef.current) return;
 
     try {
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: "mapbox://styles/mapbox/light-v11",
-        center: [78.9629, 20.5937],
-        zoom: 4,
-      });
-
-      map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
-
-      map.current.on("load", () => {
-        setIsMapLoaded(true);
+      mapRef.current = new window.google.maps.Map(mapContainer.current, {
+        center: { lat: 20.5937, lng: 78.9629 }, // India center
+        zoom: 5,
+        styles: [
+          {
+            featureType: "poi",
+            elementType: "labels",
+            stylers: [{ visibility: "off" }],
+          },
+        ],
+        mapTypeControl: true,
+        streetViewControl: false,
+        fullscreenControl: true,
       });
     } catch (error) {
       console.error("Map initialization error:", error);
       setMapError("Failed to initialize map.");
     }
-
-    return () => {
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
-      map.current?.remove();
-      map.current = null;
-    };
-  }, [mapboxToken]);
+  }, [isMapLoaded]);
 
   // Render markers whenever complaints update
   useEffect(() => {
-    if (!map.current || !isMapLoaded) return;
+    if (!mapRef.current || !isMapLoaded) return;
 
-    // clear previous markers
-    markersRef.current.forEach((m) => m.remove());
+    // Clear previous markers
+    markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
+
+    const bounds = new window.google.maps.LatLngBounds();
+    let hasValidLocations = false;
 
     complaints.forEach((complaint) => {
       if (complaint.location_lat == null || complaint.location_lng == null) return;
 
-      const el = document.createElement("div");
-      el.className = "complaint-marker";
-      el.style.width = "24px";
-      el.style.height = "24px";
-      el.style.borderRadius = "50%";
-      el.style.backgroundColor = statusColors[complaint.status] || "#6b7280";
-      el.style.border = "3px solid white";
-      el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
-      el.style.cursor = "pointer";
+      const position = { lat: complaint.location_lat, lng: complaint.location_lng };
 
-      const marker = new mapboxgl.Marker(el)
-        .setLngLat([complaint.location_lng, complaint.location_lat])
-        .addTo(map.current!);
+      const marker = new window.google.maps.Marker({
+        position,
+        map: mapRef.current,
+        title: complaint.title,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          fillColor: statusColors[complaint.status] || "#6b7280",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 3,
+          scale: 12,
+        },
+      });
 
-      el.addEventListener("click", () => setSelectedComplaint(complaint));
+      marker.addListener("click", () => {
+        setSelectedComplaint(complaint);
+        mapRef.current?.panTo(position);
+      });
+
       markersRef.current.push(marker);
+      bounds.extend(position);
+      hasValidLocations = true;
     });
+
+    // Fit bounds if we have locations
+    if (hasValidLocations && markersRef.current.length > 1) {
+      mapRef.current.fitBounds(bounds);
+    } else if (hasValidLocations && markersRef.current.length === 1) {
+      mapRef.current.setCenter(bounds.getCenter());
+      mapRef.current.setZoom(12);
+    }
   }, [complaints, isMapLoaded]);
 
   const complaintsWithLocations = useMemo(
@@ -190,20 +249,29 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
       </CardHeader>
 
       <CardContent>
+        {isLoading && !mapError && (
+          <div className="h-[500px] rounded-lg bg-muted/30 flex items-center justify-center">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin text-primary" />
+              <p className="text-muted-foreground">Loading map...</p>
+            </div>
+          </div>
+        )}
+
         {mapError && (
           <div className="h-[500px] rounded-lg bg-muted/30 flex items-center justify-center">
             <div className="text-center text-muted-foreground max-w-md px-4">
               <MapPin className="w-12 h-12 mx-auto mb-2 opacity-50" />
               <p className="font-medium">Map is not available yet</p>
               <p className="text-sm mt-1">
-                {mapError} Add your Mapbox public token in backend secrets as
-                <span className="font-mono"> MAPBOX_PUBLIC_TOKEN</span>.
+                {mapError} Add your Google Maps API key in backend secrets as
+                <span className="font-mono"> GOOGLE_MAPS_API_KEY</span>.
               </p>
             </div>
           </div>
         )}
 
-        {!mapError && (
+        {!mapError && !isLoading && (
           <div className="relative">
             <div ref={mapContainer} className="h-[500px] rounded-lg bg-muted/30" />
 
