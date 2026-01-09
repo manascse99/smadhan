@@ -1,21 +1,15 @@
 /// <reference types="google.maps" />
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { MapPin, Navigation, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { loadGoogleMapsScript, isGoogleMapsLoaded } from "@/utils/googleMaps";
 
 interface LocationPickerProps {
   value: string;
   onChange: (address: string, lat?: number, lng?: number) => void;
-}
-
-declare global {
-  interface Window {
-    initGoogleMapsCallback: () => void;
-  }
 }
 
 const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
@@ -23,7 +17,6 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
   const [isLocating, setIsLocating] = useState(false);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isLoadingMap, setIsLoadingMap] = useState(false);
-  const [apiKey, setApiKey] = useState<string>("");
   const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number } | null>(null);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -32,65 +25,70 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
   const autocompleteInputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
-  // Fetch API key
-  useEffect(() => {
-    const loadApiKey = async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke("get-google-maps-token");
-        if (error) throw error;
-        if (data?.apiKey) {
-          setApiKey(data.apiKey);
-        }
-      } catch (e) {
-        console.error("Failed to load Google Maps API key", e);
-      }
-    };
-    loadApiKey();
-  }, []);
-
   // Load Google Maps script when dialog opens
   useEffect(() => {
-    if (!isOpen || !apiKey) return;
+    if (!isOpen) return;
 
-    if (window.google?.maps?.places) {
+    if (isGoogleMapsLoaded()) {
       setIsMapLoaded(true);
       return;
     }
 
-    const existingScript = document.getElementById("google-maps-script");
-    if (existingScript) {
-      // Wait for it to load
-      const checkLoaded = setInterval(() => {
-        if (window.google?.maps?.places) {
-          setIsMapLoaded(true);
-          clearInterval(checkLoaded);
-        }
-      }, 100);
-      return () => clearInterval(checkLoaded);
-    }
-
     setIsLoadingMap(true);
 
-    window.initGoogleMapsCallback = () => {
-      setIsMapLoaded(true);
+    loadGoogleMapsScript().then((loaded) => {
+      setIsMapLoaded(loaded);
       setIsLoadingMap(false);
-    };
+      if (!loaded) {
+        toast.error("Failed to load Google Maps");
+      }
+    });
+  }, [isOpen]);
 
-    const script = document.createElement("script");
-    script.id = "google-maps-script";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMapsCallback`;
-    script.async = true;
-    script.defer = true;
-    script.onerror = () => {
-      toast.error("Failed to load Google Maps");
-      setIsLoadingMap(false);
-    };
-    document.head.appendChild(script);
+  const updateMarker = useCallback((lat: number, lng: number) => {
+    const position = { lat, lng };
 
-    return () => {
-      delete (window as any).initGoogleMapsCallback;
-    };
-  }, [isOpen, apiKey]);
+    if (markerRef.current) {
+      markerRef.current.setPosition(position);
+    } else if (mapRef.current) {
+      markerRef.current = new window.google.maps.Marker({
+        position,
+        map: mapRef.current,
+        draggable: true,
+        animation: window.google.maps.Animation.DROP,
+      });
+
+      // Add drag end listener
+      markerRef.current.addListener("dragend", async () => {
+        const pos = markerRef.current?.getPosition();
+        if (pos) {
+          const newLat = pos.lat();
+          const newLng = pos.lng();
+          setSelectedLocation({ lat: newLat, lng: newLng });
+          await reverseGeocode(newLat, newLng);
+        }
+      });
+    }
+
+    setSelectedLocation({ lat, lng });
+    mapRef.current?.panTo(position);
+  }, []);
+
+  const reverseGeocode = useCallback(async (lat: number, lng: number) => {
+    if (!window.google?.maps) return;
+
+    const geocoder = new window.google.maps.Geocoder();
+    try {
+      const response = await geocoder.geocode({ location: { lat, lng } });
+      if (response.results[0]) {
+        onChange(response.results[0].formatted_address, lat, lng);
+      } else {
+        onChange(`${lat.toFixed(6)}, ${lng.toFixed(6)}`, lat, lng);
+      }
+    } catch (error) {
+      onChange(`${lat.toFixed(6)}, ${lng.toFixed(6)}`, lat, lng);
+    }
+  }, [onChange]);
 
   // Initialize map when loaded
   useEffect(() => {
@@ -138,54 +136,9 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
         }
       });
     }
-  }, [isMapLoaded]);
+  }, [isMapLoaded, selectedLocation, updateMarker, reverseGeocode, onChange]);
 
-  const updateMarker = (lat: number, lng: number) => {
-    const position = { lat, lng };
-
-    if (markerRef.current) {
-      markerRef.current.setPosition(position);
-    } else if (mapRef.current) {
-      markerRef.current = new window.google.maps.Marker({
-        position,
-        map: mapRef.current,
-        draggable: true,
-        animation: window.google.maps.Animation.DROP,
-      });
-
-      // Add drag end listener
-      markerRef.current.addListener("dragend", async () => {
-        const pos = markerRef.current?.getPosition();
-        if (pos) {
-          const newLat = pos.lat();
-          const newLng = pos.lng();
-          setSelectedLocation({ lat: newLat, lng: newLng });
-          await reverseGeocode(newLat, newLng);
-        }
-      });
-    }
-
-    setSelectedLocation({ lat, lng });
-    mapRef.current?.panTo(position);
-  };
-
-  const reverseGeocode = async (lat: number, lng: number) => {
-    if (!window.google?.maps) return;
-
-    const geocoder = new window.google.maps.Geocoder();
-    try {
-      const response = await geocoder.geocode({ location: { lat, lng } });
-      if (response.results[0]) {
-        onChange(response.results[0].formatted_address, lat, lng);
-      } else {
-        onChange(`${lat.toFixed(6)}, ${lng.toFixed(6)}`, lat, lng);
-      }
-    } catch (error) {
-      onChange(`${lat.toFixed(6)}, ${lng.toFixed(6)}`, lat, lng);
-    }
-  };
-
-  const getCurrentLocation = () => {
+  const getCurrentLocation = useCallback(() => {
     setIsLocating(true);
     if (!navigator.geolocation) {
       toast.error("Geolocation is not supported by your browser");
@@ -197,17 +150,13 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
       async (position) => {
         const { latitude, longitude } = position.coords;
 
-        if (mapRef.current) {
+        if (mapRef.current && isMapLoaded) {
           updateMarker(latitude, longitude);
           mapRef.current.setCenter({ lat: latitude, lng: longitude });
           mapRef.current.setZoom(15);
-        }
-
-        // Reverse geocode
-        if (window.google?.maps) {
           await reverseGeocode(latitude, longitude);
         } else {
-          // Fallback to Nominatim
+          // Fallback to Nominatim if map not loaded
           try {
             const response = await fetch(
               `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
@@ -224,10 +173,6 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
 
         toast.success("Location detected successfully!");
         setIsLocating(false);
-
-        if (!isOpen) {
-          setIsOpen(false);
-        }
       },
       (error) => {
         console.error("Geolocation error:", error);
@@ -236,7 +181,7 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
-  };
+  }, [isMapLoaded, updateMarker, reverseGeocode, onChange]);
 
   const handleConfirm = () => {
     if (selectedLocation) {
@@ -294,7 +239,7 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
                     ref={autocompleteInputRef}
                     type="text"
                     placeholder="Search for a location..."
-                    className="w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background"
                   />
                 </div>
 
@@ -323,7 +268,7 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
                   )}
                   <div
                     ref={mapContainerRef}
-                    className="w-full h-[400px] rounded-lg border"
+                    className="w-full h-[400px] rounded-lg border bg-muted/30"
                   />
                 </div>
 

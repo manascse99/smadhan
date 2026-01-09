@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, X, Loader2 } from "lucide-react";
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
+import { loadGoogleMapsScript, isGoogleMapsLoaded } from "@/utils/googleMaps";
 
 interface Complaint {
   id: string;
@@ -34,12 +35,6 @@ const statusLabels: Record<string, string> = {
   fund_required: "Fund Required",
 };
 
-declare global {
-  interface Window {
-    initGoogleMapsCallback: () => void;
-  }
-}
-
 type Props = {
   complaints?: Complaint[];
 };
@@ -52,7 +47,6 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
 
   const [complaints, setComplaints] = useState<Complaint[]>(externalComplaints || []);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
-  const [apiKey, setApiKey] = useState<string>("");
   const [mapError, setMapError] = useState<string | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -62,27 +56,28 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
     if (externalComplaints) setComplaints(externalComplaints);
   }, [externalComplaints]);
 
-  // Fetch API key from backend function
+  // Load Google Maps script
   useEffect(() => {
-    const loadApiKey = async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke("get-google-maps-token");
-        if (error) throw error;
-        const key = data?.apiKey as string | undefined;
-        if (!key) {
-          setMapError("Google Maps API key is not configured.");
-          setIsLoading(false);
-          return;
-        }
-        setApiKey(key);
-      } catch (e) {
-        console.error("Failed to load Google Maps API key", e);
+    let isMounted = true;
+
+    const initMap = async () => {
+      const loaded = await loadGoogleMapsScript();
+      if (!isMounted) return;
+
+      if (loaded) {
+        setIsMapLoaded(true);
+        setIsLoading(false);
+      } else {
         setMapError("Google Maps API key is not configured.");
         setIsLoading(false);
       }
     };
 
-    loadApiKey();
+    initMap();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // If no complaints are passed, fetch all complaints with coordinates
@@ -114,44 +109,6 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
       supabase.removeChannel(channel);
     };
   }, [externalComplaints]);
-
-  // Load Google Maps script
-  useEffect(() => {
-    if (!apiKey) return;
-
-    // Check if already loaded
-    if (window.google?.maps) {
-      setIsMapLoaded(true);
-      setIsLoading(false);
-      return;
-    }
-
-    // Check if script is already being loaded
-    const existingScript = document.getElementById("google-maps-script");
-    if (existingScript) {
-      return;
-    }
-
-    window.initGoogleMapsCallback = () => {
-      setIsMapLoaded(true);
-      setIsLoading(false);
-    };
-
-    const script = document.createElement("script");
-    script.id = "google-maps-script";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMapsCallback`;
-    script.async = true;
-    script.defer = true;
-    script.onerror = () => {
-      setMapError("Failed to load Google Maps. Please check your API key.");
-      setIsLoading(false);
-    };
-    document.head.appendChild(script);
-
-    return () => {
-      delete (window as any).initGoogleMapsCallback;
-    };
-  }, [apiKey]);
 
   // Initialize map once Google Maps is loaded
   useEffect(() => {
