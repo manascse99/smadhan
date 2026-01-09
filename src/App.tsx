@@ -19,6 +19,7 @@ import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminProfile from "./pages/AdminProfile";
+import AdminReviews from "./pages/AdminReviews";
 import Profile from "./pages/Profile";
 import NotificationsPage from "./pages/NotificationsPage";
 
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/profile" element={<Profile />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/profile" element={<AdminProfile />} />
+            <Route path="/admin/reviews" element={<AdminReviews />} />
             <Route path="/admin-profile" element={<AdminProfile />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="*" element={<NotFound />} />

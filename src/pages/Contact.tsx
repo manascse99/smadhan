@@ -1,5 +1,5 @@
-import { Mail, Phone, MapPin, Send } from "lucide-react";
-import { useState } from "react";
+import { Mail, Phone, MapPin, Send, Star, MessageSquare } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,14 +8,59 @@ import { Card } from "@/components/ui/card";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+
+interface Review {
+  id: string;
+  name: string;
+  rating: number;
+  review: string;
+  created_at: string;
+}
 
 const Contact = () => {
+  const { user, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     subject: "",
     message: "",
   });
+
+  const [reviewData, setReviewData] = useState({
+    name: "",
+    email: "",
+    rating: 5,
+    review: "",
+  });
+
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+
+  useEffect(() => {
+    fetchReviews();
+    if (user) {
+      setReviewData(prev => ({
+        ...prev,
+        name: user.fullName || "",
+        email: user.email || "",
+      }));
+    }
+  }, [user]);
+
+  const fetchReviews = async () => {
+    const { data } = await supabase
+      .from('reviews')
+      .select('id, name, rating, review, created_at')
+      .eq('is_approved', true)
+      .order('created_at', { ascending: false })
+      .limit(6);
+    
+    if (data) {
+      setReviews(data);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,6 +70,64 @@ const Contact = () => {
     }
     toast.success("Message sent successfully! We'll get back to you soon.");
     setFormData({ name: "", email: "", subject: "", message: "" });
+  };
+
+  const handleReviewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!reviewData.name || !reviewData.email || !reviewData.review) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+
+    setIsSubmittingReview(true);
+    try {
+      const { error } = await supabase
+        .from('reviews')
+        .insert({
+          user_id: user?.id || null,
+          name: reviewData.name,
+          email: reviewData.email,
+          rating: reviewData.rating,
+          review: reviewData.review,
+        });
+
+      if (error) throw error;
+
+      toast.success("Thank you for your review! It will be visible after approval.");
+      setReviewData({
+        name: user?.fullName || "",
+        email: user?.email || "",
+        rating: 5,
+        review: "",
+      });
+    } catch (error: any) {
+      toast.error("Failed to submit review. Please try again.");
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  const renderStars = (rating: number, interactive = false, onChange?: (r: number) => void) => {
+    return (
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            onClick={() => interactive && onChange?.(star)}
+            className={interactive ? "cursor-pointer hover:scale-110 transition-transform" : "cursor-default"}
+            disabled={!interactive}
+          >
+            <Star
+              className={`w-5 h-5 ${
+                star <= rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"
+              }`}
+            />
+          </button>
+        ))}
+      </div>
+    );
   };
 
   return (
@@ -144,6 +247,95 @@ const Contact = () => {
               </Button>
             </form>
           </Card>
+        </div>
+
+        {/* Reviews Section */}
+        <div className="mt-16 max-w-6xl mx-auto">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold mb-2">What People Say</h2>
+            <p className="text-muted-foreground">Read reviews from our users</p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Reviews List */}
+            <div className="lg:col-span-2 space-y-4">
+              {reviews.length > 0 ? (
+                reviews.map((review) => (
+                  <Card key={review.id} className="p-6">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h4 className="font-semibold">{review.name}</h4>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(review.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {renderStars(review.rating)}
+                    </div>
+                    <p className="text-muted-foreground">{review.review}</p>
+                  </Card>
+                ))
+              ) : (
+                <Card className="p-8 text-center">
+                  <MessageSquare className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground">No reviews yet. Be the first to share your experience!</p>
+                </Card>
+              )}
+            </div>
+
+            {/* Review Form */}
+            <Card className="gradient-card shadow-xl p-6 h-fit">
+              <h3 className="text-xl font-bold mb-4">Write a Review</h3>
+              <form onSubmit={handleReviewSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="review-name">Your Name *</Label>
+                  <Input
+                    id="review-name"
+                    placeholder="Enter your name"
+                    value={reviewData.name}
+                    onChange={(e) => setReviewData({ ...reviewData, name: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="review-email">Email *</Label>
+                  <Input
+                    id="review-email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={reviewData.email}
+                    onChange={(e) => setReviewData({ ...reviewData, email: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Rating *</Label>
+                  {renderStars(reviewData.rating, true, (r) => setReviewData({ ...reviewData, rating: r }))}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="review-text">Your Review *</Label>
+                  <Textarea
+                    id="review-text"
+                    placeholder="Share your experience..."
+                    className="min-h-24 resize-none"
+                    value={reviewData.review}
+                    onChange={(e) => setReviewData({ ...reviewData, review: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <Button 
+                  type="submit" 
+                  className="w-full bg-primary hover:bg-primary-dark"
+                  disabled={isSubmittingReview}
+                >
+                  {isSubmittingReview ? "Submitting..." : "Submit Review"}
+                </Button>
+              </form>
+            </Card>
+          </div>
         </div>
 
         {/* Map */}

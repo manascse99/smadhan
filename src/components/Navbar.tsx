@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Scale, Menu, X, LayoutDashboard, LogOut, User } from "lucide-react";
+import { Scale, Menu, X, LayoutDashboard, LogOut, User, Star } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -134,6 +134,14 @@ const Navbar = () => {
                       Profile
                     </Link>
                   </DropdownMenuItem>
+                  {isAdminUser && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin/reviews" className="cursor-pointer">
+                        <Star className="w-4 h-4 mr-2" />
+                        Manage Reviews
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">
                     <LogOut className="w-4 h-4 mr-2" />
@@ -224,6 +232,20 @@ const Navbar = () => {
                     <User className="w-4 h-4" />
                     Profile
                   </Link>
+                  {isAdminUser && (
+                    <Link
+                      to="/admin/reviews"
+                      onClick={() => setIsOpen(false)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                        isActive("/admin/reviews")
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-muted"
+                      }`}
+                    >
+                      <Star className="w-4 h-4" />
+                      Manage Reviews
+                    </Link>
+                  )}
                 </>
               )}
 
