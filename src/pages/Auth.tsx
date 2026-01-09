@@ -40,6 +40,7 @@ const Auth = () => {
     password: "",
     role: UserRole.CITIZEN,
     department: "",
+    adminPasskey: "",
   });
 
   useEffect(() => {
@@ -95,6 +96,12 @@ const Auth = () => {
       return;
     }
 
+    // Validate admin passkey for officer role
+    if (signupData.role === UserRole.OFFICER && signupData.adminPasskey !== "6GX732") {
+      toast.error("Invalid admin passkey. Please contact administrator.");
+      return;
+    }
+
     setIsLoading(true);
     try {
       const fullName = `${signupData.firstName} ${signupData.lastName}`;
@@ -103,7 +110,7 @@ const Auth = () => {
         signupData.password, 
         fullName, 
         signupData.role,
-        signupData.role !== UserRole.CITIZEN ? signupData.department : undefined
+        signupData.role === UserRole.OFFICER ? signupData.department : undefined
       );
       
       setSignupSuccess(true);
@@ -160,6 +167,7 @@ const Auth = () => {
       password: "",
       role: UserRole.CITIZEN,
       department: "",
+      adminPasskey: "",
     });
     setAgreeToTerms(false);
   };
@@ -502,7 +510,7 @@ const Auth = () => {
                     <Label htmlFor="role">I am a</Label>
                     <Select 
                       value={signupData.role} 
-                      onValueChange={(value: UserRole) => setSignupData({ ...signupData, role: value })}
+                      onValueChange={(value: UserRole) => setSignupData({ ...signupData, role: value, adminPasskey: "" })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select your role" />
@@ -510,33 +518,51 @@ const Auth = () => {
                       <SelectContent>
                         <SelectItem value={UserRole.CITIZEN}>Citizen</SelectItem>
                         <SelectItem value={UserRole.OFFICER}>Government Officer</SelectItem>
-                        <SelectItem value={UserRole.ADMIN}>Administrator</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {(signupData.role === UserRole.OFFICER || signupData.role === UserRole.ADMIN) && (
-                    <div className="space-y-2">
-                      <Label htmlFor="department">Department</Label>
-                      <Select 
-                        value={signupData.department} 
-                        onValueChange={(value) => setSignupData({ ...signupData, department: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select department" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Water Supply">Water Supply</SelectItem>
-                          <SelectItem value="Road & Transport">Road & Transport</SelectItem>
-                          <SelectItem value="Electricity">Electricity</SelectItem>
-                          <SelectItem value="Waste Management">Waste Management</SelectItem>
-                          <SelectItem value="Public Safety">Public Safety</SelectItem>
-                          <SelectItem value="Healthcare">Healthcare</SelectItem>
-                          <SelectItem value="Education">Education</SelectItem>
-                          <SelectItem value="Other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  {signupData.role === UserRole.OFFICER && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="adminPasskey">Admin Passkey *</Label>
+                        <div className="relative">
+                          <KeyRound className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            id="adminPasskey"
+                            type="password"
+                            placeholder="Enter admin passkey"
+                            className="pl-10"
+                            value={signupData.adminPasskey}
+                            onChange={(e) => setSignupData({ ...signupData, adminPasskey: e.target.value })}
+                            required
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">Contact administrator for passkey</p>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="department">Department</Label>
+                        <Select 
+                          value={signupData.department} 
+                          onValueChange={(value) => setSignupData({ ...signupData, department: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select department" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Water Supply">Water Supply</SelectItem>
+                            <SelectItem value="Road & Transport">Road & Transport</SelectItem>
+                            <SelectItem value="Electricity">Electricity</SelectItem>
+                            <SelectItem value="Waste Management">Waste Management</SelectItem>
+                            <SelectItem value="Public Safety">Public Safety</SelectItem>
+                            <SelectItem value="Healthcare">Healthcare</SelectItem>
+                            <SelectItem value="Education">Education</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </>
                   )}
 
                   <div className="flex items-start space-x-2">
