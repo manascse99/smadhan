@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Upload, Send, X, User, Mail, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import LocationPicker from "@/components/LocationPicker";
+import AuthDialog from "@/components/AuthDialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,6 +18,8 @@ import { useAuth } from "@/contexts/AuthContext";
 const FileComplaint = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
+  const [showAuthDialog, setShowAuthDialog] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState(false);
   const [formData, setFormData] = useState({
     fullName: "",
     mobile: "",
@@ -43,11 +46,28 @@ const FileComplaint = () => {
     "Other",
   ];
 
-  // Redirect if not authenticated
-  if (!isAuthenticated) {
-    navigate('/auth');
-    return null;
-  }
+  // Pre-fill user data if authenticated
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', user.id)
+          .single();
+
+        if (profile) {
+          setFormData(prev => ({
+            ...prev,
+            fullName: prev.fullName || profile.full_name || "",
+            email: prev.email || profile.email || user.email || "",
+          }));
+        }
+      }
+    };
+
+    fetchUserProfile();
+  }, [user]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -72,12 +92,12 @@ const FileComplaint = () => {
     }
   };
 
-  const uploadImages = async (complaintId: string): Promise<string[]> => {
+  const uploadImages = async (userId: string, complaintId: string): Promise<string[]> => {
     const uploadedUrls: string[] = [];
     
     for (const image of images) {
       const fileExt = image.name.split('.').pop();
-      const fileName = `${user?.id}/${complaintId}/${Date.now()}.${fileExt}`;
+      const fileName = `${userId}/${complaintId}/${Date.now()}.${fileExt}`;
       
       const { data, error } = await supabase.storage
         .from('complaint-images')
@@ -98,30 +118,28 @@ const FileComplaint = () => {
     return uploadedUrls;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const validateForm = (): boolean => {
     if (!formData.fullName || !formData.mobile || !formData.email || 
         !formData.title || !formData.category || !formData.description || !formData.location) {
       toast.error("Please fill all required fields");
-      return;
+      return false;
     }
 
     if (!/^\d{10}$/.test(formData.mobile)) {
       toast.error("Please enter a valid 10-digit mobile number");
-      return;
+      return false;
     }
 
     if (!/\S+@\S+\.\S+/.test(formData.email)) {
       toast.error("Please enter a valid email address");
-      return;
+      return false;
     }
 
-    if (!user) {
-      toast.error("Please login to submit a complaint");
-      navigate('/auth');
-      return;
-    }
+    return true;
+  };
+
+  const submitComplaint = useCallback(async (currentUser: { id: string }) => {
+    if (!currentUser) return;
 
     setIsSubmitting(true);
 
@@ -130,7 +148,7 @@ const FileComplaint = () => {
       const { data, error } = await supabase
         .from('complaints')
         .insert([{
-          user_id: user.id,
+          user_id: currentUser.id,
           title: formData.title,
           description: `Contact: ${formData.fullName} | Phone: ${formData.mobile} | Email: ${formData.email}\n\n${formData.description}`,
           category: formData.category as any,
@@ -145,7 +163,7 @@ const FileComplaint = () => {
 
       // Upload images if any
       if (images.length > 0) {
-        const imageUrls = await uploadImages(data.id);
+        const imageUrls = await uploadImages(currentUser.id, data.id);
         
         if (imageUrls.length > 0) {
           await supabase
@@ -166,13 +184,12 @@ const FileComplaint = () => {
             category: formData.category,
             description: formData.description,
             location: formData.location,
-            department: formData.category, // Department name matches category
+            department: formData.category,
           }
         });
         console.log('Confirmation email sent');
       } catch (emailError) {
         console.error('Failed to send confirmation email:', emailError);
-        // Don't fail the submission if email fails
       }
 
       toast.success(`Complaint submitted successfully! Tracking ID: ${data.id}`);
@@ -182,7 +199,36 @@ const FileComplaint = () => {
       toast.error(error.message || "Failed to submit complaint. Please try again.");
     } finally {
       setIsSubmitting(false);
+      setPendingSubmit(false);
     }
+  }, [formData, images, navigate]);
+
+  // Auto-submit when user becomes authenticated after auth dialog
+  useEffect(() => {
+    if (pendingSubmit && user && isAuthenticated) {
+      submitComplaint(user);
+    }
+  }, [pendingSubmit, user, isAuthenticated, submitComplaint]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateForm()) return;
+
+    // If not authenticated, show auth dialog
+    if (!isAuthenticated || !user) {
+      setPendingSubmit(true);
+      setShowAuthDialog(true);
+      return;
+    }
+
+    // User is authenticated, submit directly
+    submitComplaint(user);
+  };
+
+  const handleAuthSuccess = () => {
+    setShowAuthDialog(false);
+    // The useEffect will handle the auto-submit when user becomes authenticated
   };
 
   return (
@@ -197,6 +243,11 @@ const FileComplaint = () => {
             <p className="text-lg text-muted-foreground">
               Your grievance matters. Fill in the details below for swift resolution.
             </p>
+            {!isAuthenticated && (
+              <p className="text-sm text-primary mt-2">
+                You can fill the form first. Login is only required when submitting.
+              </p>
+            )}
           </div>
 
           {/* Form */}
@@ -376,7 +427,7 @@ const FileComplaint = () => {
                   ) : (
                     <>
                       <Send className="w-5 h-5 mr-2" />
-                      Submit Complaint
+                      {isAuthenticated ? "Submit Complaint" : "Login & Submit Complaint"}
                     </>
                   )}
                 </Button>
@@ -390,6 +441,16 @@ const FileComplaint = () => {
       </main>
 
       <Footer />
+
+      {/* Auth Dialog */}
+      <AuthDialog
+        isOpen={showAuthDialog}
+        onClose={() => {
+          setShowAuthDialog(false);
+          setPendingSubmit(false);
+        }}
+        onSuccess={handleAuthSuccess}
+      />
     </div>
   );
 };
