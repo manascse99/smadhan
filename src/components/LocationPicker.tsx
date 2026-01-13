@@ -18,6 +18,7 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isLoadingMap, setIsLoadingMap] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [hasAutoFetched, setHasAutoFetched] = useState(false);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -138,10 +139,10 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
     }
   }, [isMapLoaded, selectedLocation, updateMarker, reverseGeocode, onChange]);
 
-  const getCurrentLocation = useCallback(() => {
+  const getCurrentLocation = useCallback((showToast = true) => {
     setIsLocating(true);
     if (!navigator.geolocation) {
-      toast.error("Geolocation is not supported by your browser");
+      if (showToast) toast.error("Geolocation is not supported by your browser");
       setIsLocating(false);
       return;
     }
@@ -171,17 +172,29 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
           }
         }
 
-        toast.success("Location detected successfully!");
+        if (showToast) toast.success("Location detected successfully!");
         setIsLocating(false);
       },
       (error) => {
         console.error("Geolocation error:", error);
-        toast.error("Unable to get your location. Please enable location services.");
+        if (showToast) toast.error("Unable to get your location. Please enable location services.");
         setIsLocating(false);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
   }, [isMapLoaded, updateMarker, reverseGeocode, onChange]);
+
+  // Auto-fetch location on component mount (only once)
+  useEffect(() => {
+    if (!hasAutoFetched && !value) {
+      setHasAutoFetched(true);
+      // Small delay to ensure component is ready
+      const timer = setTimeout(() => {
+        getCurrentLocation(false); // Don't show toast for auto-fetch
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [hasAutoFetched, value, getCurrentLocation]);
 
   const handleConfirm = () => {
     if (selectedLocation) {
@@ -213,7 +226,7 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
             type="button"
             variant="ghost"
             size="sm"
-            onClick={getCurrentLocation}
+            onClick={() => getCurrentLocation(true)}
             disabled={isLocating}
             className="h-8 px-2"
             title="Use current location"
@@ -247,7 +260,7 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={getCurrentLocation}
+                    onClick={() => getCurrentLocation(true)}
                     disabled={isLocating}
                     className="flex-1"
                   >
