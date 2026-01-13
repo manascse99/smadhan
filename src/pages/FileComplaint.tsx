@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Upload, Send, X, User, Mail, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,8 +32,9 @@ const FileComplaint = () => {
     locationLng: undefined as number | undefined,
   });
   const [images, setImages] = useState<File[]>([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
+  const previewInputRef = useRef<HTMLInputElement | null>(null);
   const [charCount, setCharCount] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const categories = [
     "Water Supply",
@@ -73,14 +74,25 @@ const FileComplaint = () => {
     const files = Array.from(e.target.files || []);
     if (files.length + images.length > 5) {
       toast.error("Maximum 5 images allowed");
+      e.target.value = "";
       return;
     }
-    setImages([...images, ...files]);
-    toast.success(`${files.length} image(s) uploaded`);
+
+    const newUrls = files.map((file) => URL.createObjectURL(file));
+    setImages((prev) => [...prev, ...files]);
+    setImagePreviewUrls((prev) => [...prev, ...newUrls]);
+
+    toast.success(`${files.length} image(s) added`);
+    e.target.value = ""; // allow re-selecting the same file
   };
 
   const removeImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
+    setImages((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviewUrls((prev) => {
+      const url = prev[index];
+      if (url) URL.revokeObjectURL(url);
+      return prev.filter((_, i) => i !== index);
+    });
     toast.success("Image removed");
   };
 
@@ -100,7 +112,7 @@ const FileComplaint = () => {
       const fileName = `${userId}/${complaintId}/${Date.now()}.${fileExt}`;
       
       const { data, error } = await supabase.storage
-        .from('complaint-images')
+        .from('complaint-media')
         .upload(fileName, image);
       
       if (error) {
@@ -109,7 +121,7 @@ const FileComplaint = () => {
       }
       
       const { data: urlData } = supabase.storage
-        .from('complaint-images')
+        .from('complaint-media')
         .getPublicUrl(data.path);
       
       uploadedUrls.push(urlData.publicUrl);
@@ -374,26 +386,35 @@ const FileComplaint = () => {
               <div className="space-y-2">
                 <Label>Upload Images (Optional - Max 5)</Label>
                 <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
-                  <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Click to upload or drag and drop supporting images
-                  </p>
+                  <label htmlFor="complaint-images-input" className="block cursor-pointer">
+                    <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground mb-1">
+                      Click to upload supporting images
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      PNG/JPG • Up to 5 files
+                    </p>
+                  </label>
                   <Input
+                    ref={previewInputRef}
+                    id="complaint-images-input"
                     type="file"
                     accept="image/*"
                     multiple
                     onChange={handleImageChange}
-                    className="cursor-pointer"
+                    className="sr-only"
                   />
                 </div>
+
                 {images.length > 0 && (
                   <div className="grid grid-cols-3 gap-4 mt-4">
-                    {images.map((img, idx) => (
+                    {images.map((_, idx) => (
                       <div key={idx} className="relative group">
                         <img
-                          src={URL.createObjectURL(img)}
-                          alt={`Preview ${idx + 1}`}
+                          src={imagePreviewUrls[idx] ?? ""}
+                          alt={`Uploaded image ${idx + 1}`}
                           className="w-full h-24 object-cover rounded-lg"
+                          loading="lazy"
                         />
                         <button
                           type="button"
@@ -406,8 +427,9 @@ const FileComplaint = () => {
                     ))}
                   </div>
                 )}
+
                 <p className="text-xs text-muted-foreground">
-                  {images.length}/5 images uploaded
+                  {images.length}/5 images selected
                 </p>
               </div>
 
