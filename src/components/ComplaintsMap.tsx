@@ -1,28 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, X, Loader2 } from "lucide-react";
-import { MapContainer, TileLayer, Marker, Popup, useMap, CircleMarker } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-
-// Fix for default marker icons in Leaflet with bundlers
-import icon from "leaflet/dist/images/marker-icon.png";
-import iconShadow from "leaflet/dist/images/marker-shadow.png";
-import iconRetina from "leaflet/dist/images/marker-icon-2x.png";
-
-const DefaultIcon = L.icon({
-  iconUrl: icon,
-  iconRetinaUrl: iconRetina,
-  shadowUrl: iconShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-
-L.Marker.prototype.options.icon = DefaultIcon;
 
 interface Complaint {
   id: string;
@@ -56,32 +38,16 @@ type Props = {
   complaints?: Complaint[];
 };
 
-// Component to fit bounds
-const FitBounds = ({ complaints }: { complaints: Complaint[] }) => {
-  const map = useMap();
-
-  useEffect(() => {
-    const validComplaints = complaints.filter(
-      (c) => c.location_lat != null && c.location_lng != null
-    );
-
-    if (validComplaints.length > 0) {
-      const bounds = L.latLngBounds(
-        validComplaints.map((c) => [c.location_lat!, c.location_lng!])
-      );
-      map.fitBounds(bounds, { padding: [20, 20] });
-    }
-  }, [complaints, map]);
-
-  return null;
-};
+const INDIA_CENTER: [number, number] = [20.5937, 78.9629];
 
 const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markersLayerRef = useRef<L.LayerGroup | null>(null);
+
   const [complaints, setComplaints] = useState<Complaint[]>(externalComplaints || []);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  const defaultCenter: [number, number] = [20.5937, 78.9629]; // India center
 
   // Keep local complaints in sync when parent passes them
   useEffect(() => {
@@ -102,9 +68,7 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
         .not("location_lat", "is", null)
         .not("location_lng", "is", null);
 
-      if (!error && data) {
-        setComplaints(data);
-      }
+      if (!error && data) setComplaints(data);
       setIsLoading(false);
     };
 
@@ -128,6 +92,86 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
     () => complaints.filter((c) => c.location_lat != null && c.location_lng != null),
     [complaints]
   );
+
+  // Init map
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+    if (mapRef.current) return;
+
+    mapRef.current = L.map(mapContainerRef.current, {
+      zoomControl: true,
+      attributionControl: true,
+    }).setView(INDIA_CENTER, 5);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(mapRef.current);
+
+    markersLayerRef.current = L.layerGroup().addTo(mapRef.current);
+
+    setTimeout(() => {
+      mapRef.current?.invalidateSize();
+    }, 100);
+
+    return () => {
+      mapRef.current?.off();
+      mapRef.current?.remove();
+      mapRef.current = null;
+      markersLayerRef.current = null;
+    };
+  }, []);
+
+  // Render markers
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = markersLayerRef.current;
+    if (!map || !layer) return;
+
+    layer.clearLayers();
+
+    if (complaintsWithLocations.length === 0) {
+      map.setView(INDIA_CENTER, 5);
+      return;
+    }
+
+    const bounds = L.latLngBounds([]);
+
+    complaintsWithLocations.forEach((c) => {
+      const lat = c.location_lat!;
+      const lng = c.location_lng!;
+      const color = statusColors[c.status] || "#6b7280";
+
+      const marker = L.circleMarker([lat, lng], {
+        radius: 10,
+        color: "#ffffff",
+        weight: 2,
+        fillColor: color,
+        fillOpacity: 0.9,
+      });
+
+      marker.on("click", () => {
+        setSelectedComplaint(c);
+        map.setView([lat, lng], Math.max(map.getZoom(), 14), { animate: true });
+      });
+
+      marker.bindPopup(
+        `<div style="min-width:180px">
+          <div style="font-weight:600; margin-bottom:4px">${escapeHtml(c.title)}</div>
+          <div style="font-size:12px; opacity:.8">${escapeHtml(c.location_address)}</div>
+        </div>`
+      );
+
+      marker.addTo(layer);
+      bounds.extend([lat, lng]);
+    });
+
+    if (complaintsWithLocations.length === 1) {
+      map.setView(bounds.getCenter(), 12);
+    } else {
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+  }, [complaintsWithLocations]);
 
   return (
     <Card>
@@ -161,82 +205,14 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
 
         {!isLoading && (
           <div className="relative">
-            <div className="h-[500px] rounded-lg overflow-hidden">
-              <MapContainer
-                center={defaultCenter}
-                zoom={5}
-                style={{ height: "100%", width: "100%" }}
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-                <FitBounds complaints={complaintsWithLocations} />
-                {complaintsWithLocations.map((complaint) => (
-                  <CircleMarker
-                    key={complaint.id}
-                    center={[complaint.location_lat!, complaint.location_lng!]}
-                    radius={10}
-                    pathOptions={{
-                      fillColor: statusColors[complaint.status] || "#6b7280",
-                      fillOpacity: 0.9,
-                      color: "#ffffff",
-                      weight: 2,
-                    }}
-                    eventHandlers={{
-                      click: () => setSelectedComplaint(complaint),
-                    }}
-                  >
-                    <Popup>
-                      <div className="p-1">
-                        <h3 className="font-semibold text-sm">{complaint.title}</h3>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {complaint.location_address}
-                        </p>
-                        <div className="flex gap-1 mt-2 flex-wrap">
-                          <span className="text-xs bg-muted px-2 py-0.5 rounded">
-                            {complaint.category}
-                          </span>
-                          <span
-                            className="text-xs px-2 py-0.5 rounded text-white"
-                            style={{
-                              backgroundColor: statusColors[complaint.status] || "#6b7280",
-                            }}
-                          >
-                            {statusLabels[complaint.status] || complaint.status}
-                          </span>
-                        </div>
-                      </div>
-                    </Popup>
-                  </CircleMarker>
-                ))}
-              </MapContainer>
-            </div>
-
-            {/* Status Legend */}
-            <div className="absolute top-4 right-4 bg-background/95 backdrop-blur-sm rounded-lg p-3 shadow-lg z-[1000]">
-              <p className="text-xs font-medium mb-2">Status Legend</p>
-              <div className="space-y-1 text-xs">
-                {Object.entries(statusLabels).map(([status, label]) => (
-                  <div key={status} className="flex items-center gap-2">
-                    <div
-                      className="w-4 h-4 rounded-full"
-                      style={{ backgroundColor: statusColors[status] }}
-                    />
-                    <span>{label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <div ref={mapContainerRef} className="h-[500px] rounded-lg overflow-hidden" />
 
             {selectedComplaint && (
               <div className="absolute bottom-4 left-4 right-4 bg-background border rounded-lg p-4 shadow-lg z-[1000]">
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="font-semibold">{selectedComplaint.title}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedComplaint.location_address}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{selectedComplaint.location_address}</p>
                     <div className="flex gap-2 mt-2 flex-wrap">
                       <Badge>{selectedComplaint.category}</Badge>
                       <Badge
@@ -261,7 +237,7 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
             )}
 
             <div className="mt-2 text-xs text-muted-foreground">
-              Showing {complaintsWithLocations.length} complaint(s) • Click on markers to view details
+              Showing {complaintsWithLocations.length} complaint(s) • Click markers to view details
             </div>
           </div>
         )}
@@ -269,5 +245,14 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
     </Card>
   );
 };
+
+function escapeHtml(input: string) {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
 export default ComplaintsMap;

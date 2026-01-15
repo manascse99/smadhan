@@ -1,11 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MapPin, Navigation, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import L from "leaflet";
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
 // Fix for default marker icons in Leaflet with bundlers
@@ -30,30 +29,7 @@ interface LocationPickerProps {
   onChange: (address: string, lat?: number, lng?: number) => void;
 }
 
-// Component to handle map click events
-const MapClickHandler = ({
-  onLocationSelect,
-}: {
-  onLocationSelect: (lat: number, lng: number) => void;
-}) => {
-  useMapEvents({
-    click: (e) => {
-      onLocationSelect(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-};
-
-// Component to recenter map
-const MapRecenter = ({ center }: { center: [number, number] | null }) => {
-  const map = useMap();
-  useEffect(() => {
-    if (center) {
-      map.setView(center, 15);
-    }
-  }, [center, map]);
-  return null;
-};
+const INDIA_CENTER: [number, number] = [20.5937, 78.9629];
 
 const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -63,7 +39,9 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
 
-  const defaultCenter: [number, number] = [20.5937, 78.9629]; // India center
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
 
   const reverseGeocode = useCallback(
     async (lat: number, lng: number) => {
@@ -81,13 +59,98 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
     [onChange]
   );
 
-  const handleLocationSelect = useCallback(
-    async (lat: number, lng: number) => {
-      setSelectedLocation({ lat, lng });
-      await reverseGeocode(lat, lng);
+  const setMarker = useCallback(
+    (lat: number, lng: number) => {
+      const latlng: L.LatLngExpression = [lat, lng];
+      const map = mapRef.current;
+      if (!map) return;
+
+      if (!markerRef.current) {
+        markerRef.current = L.marker(latlng, { draggable: true }).addTo(map);
+        markerRef.current.on("dragend", async () => {
+          const pos = markerRef.current?.getLatLng();
+          if (!pos) return;
+          setSelectedLocation({ lat: pos.lat, lng: pos.lng });
+          await reverseGeocode(pos.lat, pos.lng);
+        });
+      } else {
+        markerRef.current.setLatLng(latlng);
+      }
+
+      map.setView(latlng, Math.max(map.getZoom(), 15), { animate: true });
     },
     [reverseGeocode]
   );
+
+  const handleLocationSelect = useCallback(
+    async (lat: number, lng: number) => {
+      setSelectedLocation({ lat, lng });
+      if (mapRef.current) setMarker(lat, lng);
+      await reverseGeocode(lat, lng);
+    },
+    [reverseGeocode, setMarker]
+  );
+
+  const initMapIfNeeded = useCallback(() => {
+    if (!isOpen) return;
+    if (!mapContainerRef.current) return;
+    if (mapRef.current) return;
+
+    const center: [number, number] = selectedLocation
+      ? [selectedLocation.lat, selectedLocation.lng]
+      : INDIA_CENTER;
+
+    mapRef.current = L.map(mapContainerRef.current, {
+      zoomControl: true,
+      attributionControl: true,
+    }).setView(center, selectedLocation ? 15 : 5);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(mapRef.current);
+
+    mapRef.current.on("click", async (e: L.LeafletMouseEvent) => {
+      await handleLocationSelect(e.latlng.lat, e.latlng.lng);
+    });
+
+    // If we already have a location, show it
+    if (selectedLocation) {
+      setMarker(selectedLocation.lat, selectedLocation.lng);
+    }
+
+    // Important when inside dialogs/portals
+    setTimeout(() => {
+      mapRef.current?.invalidateSize();
+    }, 150);
+  }, [handleLocationSelect, isOpen, selectedLocation, setMarker]);
+
+  // Initialize map when dialog opens
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // next tick to ensure DialogContent mounted
+    const t = setTimeout(() => initMapIfNeeded(), 0);
+    return () => clearTimeout(t);
+  }, [initMapIfNeeded, isOpen]);
+
+  // Keep map in sync with selected location
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!selectedLocation) return;
+    if (!mapRef.current) return;
+
+    setMarker(selectedLocation.lat, selectedLocation.lng);
+  }, [isOpen, selectedLocation, setMarker]);
+
+  const destroyMap = useCallback(() => {
+    if (mapRef.current) {
+      mapRef.current.off();
+      mapRef.current.remove();
+    }
+    mapRef.current = null;
+    markerRef.current = null;
+  }, []);
 
   const getCurrentLocation = useCallback(
     (showToast = true) => {
@@ -101,8 +164,7 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
-          setSelectedLocation({ lat: latitude, lng: longitude });
-          await reverseGeocode(latitude, longitude);
+          await handleLocationSelect(latitude, longitude);
           if (showToast) toast.success("Location detected successfully!");
           setIsLocating(false);
         },
@@ -114,7 +176,7 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
       );
     },
-    [reverseGeocode]
+    [handleLocationSelect]
   );
 
   // Auto-fetch location on component mount (only once)
@@ -126,7 +188,7 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [hasAutoFetched, value, getCurrentLocation]);
+  }, [getCurrentLocation, hasAutoFetched, value]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -144,8 +206,16 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
         const { lat, lon, display_name } = data[0];
         const latitude = parseFloat(lat);
         const longitude = parseFloat(lon);
+
         setSelectedLocation({ lat: latitude, lng: longitude });
         onChange(display_name, latitude, longitude);
+
+        // Ensure map exists then set marker + view
+        if (!mapRef.current) initMapIfNeeded();
+        setTimeout(() => {
+          setMarker(latitude, longitude);
+        }, 0);
+
         toast.success("Location found!");
       } else {
         toast.error("Location not found. Please try a different search.");
@@ -167,6 +237,7 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
 
   const handleDialogClose = () => {
     setIsOpen(false);
+    destroyMap();
   };
 
   return (
@@ -203,7 +274,6 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
                 <DialogTitle>Select Location from Map</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
-                {/* Search Input */}
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <MapPin className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
@@ -212,7 +282,12 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
                       placeholder="Search for a location..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleSearch();
+                        }
+                      }}
                       className="pl-10"
                     />
                   </div>
@@ -234,28 +309,15 @@ const LocationPicker = ({ value, onChange }: LocationPickerProps) => {
                   </Button>
                 </div>
 
-                {/* Map Container */}
-                <div className="h-[400px] rounded-lg border overflow-hidden">
-                  <MapContainer
-                    center={selectedLocation ? [selectedLocation.lat, selectedLocation.lng] : defaultCenter}
-                    zoom={selectedLocation ? 15 : 5}
-                    style={{ height: "100%", width: "100%" }}
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <MapClickHandler onLocationSelect={handleLocationSelect} />
-                    {selectedLocation && (
-                      <>
-                        <Marker position={[selectedLocation.lat, selectedLocation.lng]} />
-                        <MapRecenter center={[selectedLocation.lat, selectedLocation.lng]} />
-                      </>
-                    )}
-                  </MapContainer>
+                <div className="relative h-[400px] rounded-lg border overflow-hidden bg-muted/30">
+                  {!isOpen && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                    </div>
+                  )}
+                  <div ref={mapContainerRef} className="h-full w-full" />
                 </div>
 
-                {/* Instructions */}
                 <p className="text-sm text-muted-foreground text-center">
                   Click on the map to select a location, search above, or use GPS
                 </p>
