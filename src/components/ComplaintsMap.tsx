@@ -3,10 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, X, Loader2 } from "lucide-react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap, CircleMarker } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import MarkerClusterGroup from "react-leaflet-cluster";
 
 // Fix for default marker icons in Leaflet with bundlers
 import icon from "leaflet/dist/images/marker-icon.png";
@@ -51,23 +50,6 @@ const statusLabels: Record<string, string> = {
   resolved: "Resolved",
   escalated: "Escalated",
   fund_required: "Fund Required",
-};
-
-// Create custom colored markers
-const createColoredIcon = (color: string) => {
-  return L.divIcon({
-    className: "custom-marker",
-    html: `<div style="
-      background-color: ${color};
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      border: 3px solid white;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    "></div>`,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  });
 };
 
 type Props = {
@@ -147,34 +129,6 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
     [complaints]
   );
 
-  // Custom cluster icon
-  const createClusterCustomIcon = (cluster: any) => {
-    const count = cluster.getChildCount();
-    let color = "#22c55e"; // green for few
-    if (count >= 10) color = "#ef4444"; // red for hotspots
-    else if (count >= 5) color = "#f97316"; // orange for medium
-    else if (count >= 3) color = "#eab308"; // yellow for low-medium
-
-    return L.divIcon({
-      html: `<div style="
-        background-color: ${color};
-        width: ${Math.min(count * 2 + 30, 60)}px;
-        height: ${Math.min(count * 2 + 30, 60)}px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: bold;
-        font-size: 14px;
-        border: 3px solid white;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      ">${count}</div>`,
-      className: "custom-cluster-icon",
-      iconSize: L.point(40, 40, true),
-    });
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -218,66 +172,60 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
                 <FitBounds complaints={complaintsWithLocations} />
-                <MarkerClusterGroup
-                  chunkedLoading
-                  iconCreateFunction={createClusterCustomIcon}
-                >
-                  {complaintsWithLocations.map((complaint) => (
-                    <Marker
-                      key={complaint.id}
-                      position={[complaint.location_lat!, complaint.location_lng!]}
-                      icon={createColoredIcon(statusColors[complaint.status] || "#6b7280")}
-                      eventHandlers={{
-                        click: () => setSelectedComplaint(complaint),
-                      }}
-                    >
-                      <Popup>
-                        <div className="p-1">
-                          <h3 className="font-semibold text-sm">{complaint.title}</h3>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {complaint.location_address}
-                          </p>
-                          <div className="flex gap-1 mt-2 flex-wrap">
-                            <span className="text-xs bg-muted px-2 py-0.5 rounded">
-                              {complaint.category}
-                            </span>
-                            <span
-                              className="text-xs px-2 py-0.5 rounded text-white"
-                              style={{
-                                backgroundColor: statusColors[complaint.status] || "#6b7280",
-                              }}
-                            >
-                              {statusLabels[complaint.status] || complaint.status}
-                            </span>
-                          </div>
+                {complaintsWithLocations.map((complaint) => (
+                  <CircleMarker
+                    key={complaint.id}
+                    center={[complaint.location_lat!, complaint.location_lng!]}
+                    radius={10}
+                    pathOptions={{
+                      fillColor: statusColors[complaint.status] || "#6b7280",
+                      fillOpacity: 0.9,
+                      color: "#ffffff",
+                      weight: 2,
+                    }}
+                    eventHandlers={{
+                      click: () => setSelectedComplaint(complaint),
+                    }}
+                  >
+                    <Popup>
+                      <div className="p-1">
+                        <h3 className="font-semibold text-sm">{complaint.title}</h3>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {complaint.location_address}
+                        </p>
+                        <div className="flex gap-1 mt-2 flex-wrap">
+                          <span className="text-xs bg-muted px-2 py-0.5 rounded">
+                            {complaint.category}
+                          </span>
+                          <span
+                            className="text-xs px-2 py-0.5 rounded text-white"
+                            style={{
+                              backgroundColor: statusColors[complaint.status] || "#6b7280",
+                            }}
+                          >
+                            {statusLabels[complaint.status] || complaint.status}
+                          </span>
                         </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </MarkerClusterGroup>
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                ))}
               </MapContainer>
             </div>
 
-            {/* Hotspot Legend */}
+            {/* Status Legend */}
             <div className="absolute top-4 right-4 bg-background/95 backdrop-blur-sm rounded-lg p-3 shadow-lg z-[1000]">
-              <p className="text-xs font-medium mb-2">Hotspot Intensity</p>
+              <p className="text-xs font-medium mb-2">Status Legend</p>
               <div className="space-y-1 text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-red-500" />
-                  <span>10+ complaints</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-orange-500" />
-                  <span>5-9 complaints</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-yellow-500" />
-                  <span>3-4 complaints</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-green-500" />
-                  <span>1-2 complaints</span>
-                </div>
+                {Object.entries(statusLabels).map(([status, label]) => (
+                  <div key={status} className="flex items-center gap-2">
+                    <div
+                      className="w-4 h-4 rounded-full"
+                      style={{ backgroundColor: statusColors[status] }}
+                    />
+                    <span>{label}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -313,8 +261,7 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
             )}
 
             <div className="mt-2 text-xs text-muted-foreground">
-              Showing {complaintsWithLocations.length} complaint(s) • Click on clusters to zoom
-              into hotspots
+              Showing {complaintsWithLocations.length} complaint(s) • Click on markers to view details
             </div>
           </div>
         )}
