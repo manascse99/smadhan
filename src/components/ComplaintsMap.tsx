@@ -1,11 +1,29 @@
-/// <reference types="google.maps" />
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, X, Loader2 } from "lucide-react";
-import { MarkerClusterer } from "@googlemaps/markerclusterer";
-import { loadGoogleMapsScript, isGoogleMapsLoaded } from "@/utils/googleMaps";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import MarkerClusterGroup from "react-leaflet-cluster";
+
+// Fix for default marker icons in Leaflet with bundlers
+import icon from "leaflet/dist/images/marker-icon.png";
+import iconShadow from "leaflet/dist/images/marker-shadow.png";
+import iconRetina from "leaflet/dist/images/marker-icon-2x.png";
+
+const DefaultIcon = L.icon({
+  iconUrl: icon,
+  iconRetinaUrl: iconRetina,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+L.Marker.prototype.options.icon = DefaultIcon;
 
 interface Complaint {
   id: string;
@@ -35,50 +53,61 @@ const statusLabels: Record<string, string> = {
   fund_required: "Fund Required",
 };
 
+// Create custom colored markers
+const createColoredIcon = (color: string) => {
+  return L.divIcon({
+    className: "custom-marker",
+    html: `<div style="
+      background-color: ${color};
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 3px solid white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    "></div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+};
+
 type Props = {
   complaints?: Complaint[];
 };
 
-const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<google.maps.Marker[]>([]);
-  const clustererRef = useRef<MarkerClusterer | null>(null);
+// Component to fit bounds
+const FitBounds = ({ complaints }: { complaints: Complaint[] }) => {
+  const map = useMap();
 
+  useEffect(() => {
+    const validComplaints = complaints.filter(
+      (c) => c.location_lat != null && c.location_lng != null
+    );
+
+    if (validComplaints.length > 0) {
+      const bounds = L.latLngBounds(
+        validComplaints.map((c) => [c.location_lat!, c.location_lng!])
+      );
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+  }, [complaints, map]);
+
+  return null;
+};
+
+const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
   const [complaints, setComplaints] = useState<Complaint[]>(externalComplaints || []);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
-  const [mapError, setMapError] = useState<string | null>(null);
-  const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  const defaultCenter: [number, number] = [20.5937, 78.9629]; // India center
 
   // Keep local complaints in sync when parent passes them
   useEffect(() => {
-    if (externalComplaints) setComplaints(externalComplaints);
+    if (externalComplaints) {
+      setComplaints(externalComplaints);
+      setIsLoading(false);
+    }
   }, [externalComplaints]);
-
-  // Load Google Maps script
-  useEffect(() => {
-    let isMounted = true;
-
-    const initMap = async () => {
-      const loaded = await loadGoogleMapsScript();
-      if (!isMounted) return;
-
-      if (loaded) {
-        setIsMapLoaded(true);
-        setIsLoading(false);
-      } else {
-        setMapError("Google Maps API key is not configured.");
-        setIsLoading(false);
-      }
-    };
-
-    initMap();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   // If no complaints are passed, fetch all complaints with coordinates
   useEffect(() => {
@@ -91,7 +120,10 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
         .not("location_lat", "is", null)
         .not("location_lng", "is", null);
 
-      if (!error && data) setComplaints(data);
+      if (!error && data) {
+        setComplaints(data);
+      }
+      setIsLoading(false);
     };
 
     fetchComplaints();
@@ -110,127 +142,38 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
     };
   }, [externalComplaints]);
 
-  // Initialize map once Google Maps is loaded
-  useEffect(() => {
-    if (!mapContainer.current || !isMapLoaded || mapRef.current) return;
-
-    try {
-      mapRef.current = new window.google.maps.Map(mapContainer.current, {
-        center: { lat: 20.5937, lng: 78.9629 }, // India center
-        zoom: 5,
-        styles: [
-          {
-            featureType: "poi",
-            elementType: "labels",
-            stylers: [{ visibility: "off" }],
-          },
-        ],
-        mapTypeControl: true,
-        streetViewControl: false,
-        fullscreenControl: true,
-      });
-    } catch (error) {
-      console.error("Map initialization error:", error);
-      setMapError("Failed to initialize map.");
-    }
-  }, [isMapLoaded]);
-
-  // Render markers with clustering whenever complaints update
-  useEffect(() => {
-    if (!mapRef.current || !isMapLoaded) return;
-
-    // Clear previous clusterer and markers
-    if (clustererRef.current) {
-      clustererRef.current.clearMarkers();
-      clustererRef.current = null;
-    }
-    markersRef.current.forEach((m) => m.setMap(null));
-    markersRef.current = [];
-
-    const bounds = new window.google.maps.LatLngBounds();
-    let hasValidLocations = false;
-
-    const markers = complaints
-      .filter((c) => c.location_lat != null && c.location_lng != null)
-      .map((complaint) => {
-        const position = { lat: complaint.location_lat!, lng: complaint.location_lng! };
-
-        const marker = new window.google.maps.Marker({
-          position,
-          title: complaint.title,
-          icon: {
-            path: window.google.maps.SymbolPath.CIRCLE,
-            fillColor: statusColors[complaint.status] || "#6b7280",
-            fillOpacity: 1,
-            strokeColor: "#ffffff",
-            strokeWeight: 2,
-            scale: 10,
-          },
-        });
-
-        marker.addListener("click", () => {
-          setSelectedComplaint(complaint);
-          mapRef.current?.panTo(position);
-          mapRef.current?.setZoom(14);
-        });
-
-        bounds.extend(position);
-        hasValidLocations = true;
-
-        return marker;
-      });
-
-    markersRef.current = markers;
-
-    // Add marker clusterer for hotspot visualization
-    if (markers.length > 0) {
-      clustererRef.current = new MarkerClusterer({
-        map: mapRef.current,
-        markers,
-        renderer: {
-          render: ({ count, position }) => {
-            // Color based on cluster size (hotspot intensity)
-            let color = "#22c55e"; // green for few
-            if (count >= 10) color = "#ef4444"; // red for hotspots
-            else if (count >= 5) color = "#f97316"; // orange for medium
-            else if (count >= 3) color = "#eab308"; // yellow for low-medium
-
-            return new window.google.maps.Marker({
-              position,
-              icon: {
-                path: window.google.maps.SymbolPath.CIRCLE,
-                fillColor: color,
-                fillOpacity: 0.9,
-                strokeColor: "#ffffff",
-                strokeWeight: 3,
-                scale: Math.min(count * 2 + 15, 40),
-              },
-              label: {
-                text: String(count),
-                color: "#ffffff",
-                fontWeight: "bold",
-                fontSize: "12px",
-              },
-              zIndex: count,
-            });
-          },
-        },
-      });
-    }
-
-    // Fit bounds if we have locations
-    if (hasValidLocations && markers.length > 1) {
-      mapRef.current.fitBounds(bounds);
-    } else if (hasValidLocations && markers.length === 1) {
-      mapRef.current.setCenter(bounds.getCenter());
-      mapRef.current.setZoom(12);
-    }
-  }, [complaints, isMapLoaded]);
-
   const complaintsWithLocations = useMemo(
-    () => complaints.filter((c) => c.location_lat != null && c.location_lng != null).length,
+    () => complaints.filter((c) => c.location_lat != null && c.location_lng != null),
     [complaints]
   );
+
+  // Custom cluster icon
+  const createClusterCustomIcon = (cluster: any) => {
+    const count = cluster.getChildCount();
+    let color = "#22c55e"; // green for few
+    if (count >= 10) color = "#ef4444"; // red for hotspots
+    else if (count >= 5) color = "#f97316"; // orange for medium
+    else if (count >= 3) color = "#eab308"; // yellow for low-medium
+
+    return L.divIcon({
+      html: `<div style="
+        background-color: ${color};
+        width: ${Math.min(count * 2 + 30, 60)}px;
+        height: ${Math.min(count * 2 + 30, 60)}px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 14px;
+        border: 3px solid white;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      ">${count}</div>`,
+      className: "custom-cluster-icon",
+      iconSize: L.point(40, 40, true),
+    });
+  };
 
   return (
     <Card>
@@ -239,7 +182,7 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
           <MapPin className="w-5 h-5" />
           Complaint Hotspot Map
           <Badge variant="secondary" className="ml-2">
-            {complaintsWithLocations} locations
+            {complaintsWithLocations.length} locations
           </Badge>
         </CardTitle>
         <div className="flex gap-2 text-xs flex-wrap mt-2">
@@ -253,7 +196,7 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
       </CardHeader>
 
       <CardContent>
-        {isLoading && !mapError && (
+        {isLoading && (
           <div className="h-[500px] rounded-lg bg-muted/30 flex items-center justify-center">
             <div className="text-center">
               <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin text-primary" />
@@ -262,25 +205,61 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
           </div>
         )}
 
-        {mapError && (
-          <div className="h-[500px] rounded-lg bg-muted/30 flex items-center justify-center">
-            <div className="text-center text-muted-foreground max-w-md px-4">
-              <MapPin className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p className="font-medium">Map is not available yet</p>
-              <p className="text-sm mt-1">
-                {mapError} Add your Google Maps API key in backend secrets as
-                <span className="font-mono"> GOOGLE_MAPS_API_KEY</span>.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {!mapError && !isLoading && (
+        {!isLoading && (
           <div className="relative">
-            <div ref={mapContainer} className="h-[500px] rounded-lg bg-muted/30" />
+            <div className="h-[500px] rounded-lg overflow-hidden">
+              <MapContainer
+                center={defaultCenter}
+                zoom={5}
+                style={{ height: "100%", width: "100%" }}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <FitBounds complaints={complaintsWithLocations} />
+                <MarkerClusterGroup
+                  chunkedLoading
+                  iconCreateFunction={createClusterCustomIcon}
+                >
+                  {complaintsWithLocations.map((complaint) => (
+                    <Marker
+                      key={complaint.id}
+                      position={[complaint.location_lat!, complaint.location_lng!]}
+                      icon={createColoredIcon(statusColors[complaint.status] || "#6b7280")}
+                      eventHandlers={{
+                        click: () => setSelectedComplaint(complaint),
+                      }}
+                    >
+                      <Popup>
+                        <div className="p-1">
+                          <h3 className="font-semibold text-sm">{complaint.title}</h3>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {complaint.location_address}
+                          </p>
+                          <div className="flex gap-1 mt-2 flex-wrap">
+                            <span className="text-xs bg-muted px-2 py-0.5 rounded">
+                              {complaint.category}
+                            </span>
+                            <span
+                              className="text-xs px-2 py-0.5 rounded text-white"
+                              style={{
+                                backgroundColor: statusColors[complaint.status] || "#6b7280",
+                              }}
+                            >
+                              {statusLabels[complaint.status] || complaint.status}
+                            </span>
+                          </div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+                </MarkerClusterGroup>
+              </MapContainer>
+            </div>
 
             {/* Hotspot Legend */}
-            <div className="absolute top-4 right-4 bg-background/95 backdrop-blur-sm rounded-lg p-3 shadow-lg">
+            <div className="absolute top-4 right-4 bg-background/95 backdrop-blur-sm rounded-lg p-3 shadow-lg z-[1000]">
               <p className="text-xs font-medium mb-2">Hotspot Intensity</p>
               <div className="space-y-1 text-xs">
                 <div className="flex items-center gap-2">
@@ -303,11 +282,13 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
             </div>
 
             {selectedComplaint && (
-              <div className="absolute bottom-4 left-4 right-4 bg-background border rounded-lg p-4 shadow-lg">
+              <div className="absolute bottom-4 left-4 right-4 bg-background border rounded-lg p-4 shadow-lg z-[1000]">
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="font-semibold">{selectedComplaint.title}</h3>
-                    <p className="text-sm text-muted-foreground">{selectedComplaint.location_address}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedComplaint.location_address}
+                    </p>
                     <div className="flex gap-2 mt-2 flex-wrap">
                       <Badge>{selectedComplaint.category}</Badge>
                       <Badge
@@ -332,7 +313,8 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
             )}
 
             <div className="mt-2 text-xs text-muted-foreground">
-              Showing {complaintsWithLocations} complaint(s) • Click on clusters to zoom into hotspots
+              Showing {complaintsWithLocations.length} complaint(s) • Click on clusters to zoom
+              into hotspots
             </div>
           </div>
         )}

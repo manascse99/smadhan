@@ -20,6 +20,7 @@ const FileComplaint = () => {
   const { user, isAuthenticated } = useAuth();
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     fullName: "",
     mobile: "",
