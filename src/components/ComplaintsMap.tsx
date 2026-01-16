@@ -47,7 +47,7 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
 
   const [complaints, setComplaints] = useState<Complaint[]>(externalComplaints || []);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(externalComplaints === undefined);
 
   // Keep local complaints in sync when parent passes them
   useEffect(() => {
@@ -93,12 +93,20 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
     [complaints]
   );
 
-  // Init map
+  // Init map (wait until the container is actually mounted)
   useEffect(() => {
+    if (isLoading) return;
     if (!mapContainerRef.current) return;
-    if (mapRef.current) return;
 
-    mapRef.current = L.map(mapContainerRef.current, {
+    const container = mapContainerRef.current;
+
+    // If the map already exists (e.g., tab re-renders), just refresh sizing
+    if (mapRef.current) {
+      mapRef.current.invalidateSize();
+      return;
+    }
+
+    mapRef.current = L.map(container, {
       zoomControl: true,
       attributionControl: true,
     }).setView(INDIA_CENTER, 5);
@@ -110,17 +118,24 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
 
     markersLayerRef.current = L.layerGroup().addTo(mapRef.current);
 
+    // Fix blank maps when mounted inside tabs/dialogs where size is 0 at first paint
+    const ro = new ResizeObserver(() => {
+      mapRef.current?.invalidateSize();
+    });
+    ro.observe(container);
+
     setTimeout(() => {
       mapRef.current?.invalidateSize();
     }, 100);
 
     return () => {
+      ro.disconnect();
       mapRef.current?.off();
       mapRef.current?.remove();
       mapRef.current = null;
       markersLayerRef.current = null;
     };
-  }, []);
+  }, [isLoading]);
 
   // Render markers
   useEffect(() => {
