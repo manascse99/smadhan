@@ -137,6 +137,23 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
     };
   }, [isLoading]);
 
+  // Create a location pin icon with the given color
+  const createPinIcon = (color: string) => {
+    const svgIcon = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 24 24" fill="${color}" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+        <circle cx="12" cy="10" r="3" fill="#ffffff" stroke="${color}" stroke-width="1"/>
+      </svg>
+    `;
+    return L.divIcon({
+      html: svgIcon,
+      className: "custom-pin-icon",
+      iconSize: [32, 40],
+      iconAnchor: [16, 40],
+      popupAnchor: [0, -40],
+    });
+  };
+
   // Render markers
   useEffect(() => {
     const map = mapRef.current;
@@ -157,12 +174,8 @@ const ComplaintsMap = ({ complaints: externalComplaints }: Props) => {
       const lng = c.location_lng!;
       const color = statusColors[c.status] || "#6b7280";
 
-      const marker = L.circleMarker([lat, lng], {
-        radius: 10,
-        color: "#ffffff",
-        weight: 2,
-        fillColor: color,
-        fillOpacity: 0.9,
+      const marker = L.marker([lat, lng], {
+        icon: createPinIcon(color),
       });
 
       marker.on("click", () => {
