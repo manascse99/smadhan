@@ -181,4 +181,10 @@ All colors MUST be HSL.
   .status-urgent {
     @apply bg-[hsl(var(--status-urgent))] text-white;
   }
+
+  /* Leaflet custom pin icon - remove default styling */
+  .custom-pin-icon {
+    background: transparent !important;
+    border: none !important;
+  }
 }
