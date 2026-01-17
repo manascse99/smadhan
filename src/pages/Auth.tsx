@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserRole } from "@/types/roles";
 import { supabase } from "@/integrations/supabase/client";
+import { GoogleOnboardingDialog } from "@/components/GoogleOnboardingDialog";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -29,6 +30,14 @@ const Auth = () => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
   const [resetEmailSent, setResetEmailSent] = useState(false);
+
+  // Google OAuth onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingUser, setOnboardingUser] = useState<{
+    id: string;
+    email: string;
+    name: string;
+  } | null>(null);
   
   const [signinData, setSigninData] = useState({ 
     email: "", 
@@ -44,15 +53,43 @@ const Auth = () => {
     adminPasskey: "",
   });
 
+  // Check for Google OAuth redirect and new users
   useEffect(() => {
-    if (isAuthenticated && user) {
+    const checkOAuthUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        // Check if user has a role assigned
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id)
+          .single();
+
+        if (!roleData) {
+          // New Google OAuth user - needs onboarding
+          setOnboardingUser({
+            id: session.user.id,
+            email: session.user.email || "",
+            name: session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "",
+          });
+          setShowOnboarding(true);
+        }
+      }
+    };
+
+    checkOAuthUser();
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated && user && !showOnboarding) {
       if (user.role === 'admin' || user.role === 'officer') {
         navigate("/admin/dashboard");
       } else {
         navigate("/dashboard");
       }
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, navigate, showOnboarding]);
 
   const handleSignin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,8 +220,27 @@ const Auth = () => {
     setAgreeToTerms(false);
   };
 
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+    setOnboardingUser(null);
+    // Refresh user data and redirect
+    window.location.reload();
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-primary via-primary-dark to-secondary">
+    <>
+      {/* Google OAuth Onboarding Dialog */}
+      {showOnboarding && onboardingUser && (
+        <GoogleOnboardingDialog
+          isOpen={showOnboarding}
+          userId={onboardingUser.id}
+          userEmail={onboardingUser.email}
+          userName={onboardingUser.name}
+          onComplete={handleOnboardingComplete}
+        />
+      )}
+      
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-primary via-primary-dark to-secondary">
       <Card className="w-full max-w-md bg-background border-border shadow-2xl relative">
         {/* Close Button */}
         <Link to="/" className="absolute top-4 right-4 text-muted-foreground hover:text-foreground">
@@ -574,6 +630,7 @@ const Auth = () => {
         </Tabs>
       </Card>
     </div>
+    </>
   );
 };
 
