@@ -37,6 +37,7 @@ const Auth = () => {
     id: string;
     email: string;
     name: string;
+    avatarUrl: string;
   } | null>(null);
   
   const [signinData, setSigninData] = useState({ 
@@ -68,10 +69,13 @@ const Auth = () => {
 
         if (!roleData) {
           // New Google OAuth user - needs onboarding
+          const avatarUrl = session.user.user_metadata?.avatar_url || 
+                           session.user.user_metadata?.picture || "";
           setOnboardingUser({
             id: session.user.id,
             email: session.user.email || "",
             name: session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "",
+            avatarUrl: avatarUrl,
           });
           setShowOnboarding(true);
         }
@@ -236,6 +240,7 @@ const Auth = () => {
           userId={onboardingUser.id}
           userEmail={onboardingUser.email}
           userName={onboardingUser.name}
+          userAvatarUrl={onboardingUser.avatarUrl}
           onComplete={handleOnboardingComplete}
         />
       )}

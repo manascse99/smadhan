@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { UserRole } from "@/types/roles";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -14,6 +15,7 @@ interface GoogleOnboardingDialogProps {
   userId: string;
   userEmail: string;
   userName: string;
+  userAvatarUrl: string;
   onComplete: () => void;
 }
 
@@ -22,6 +24,7 @@ export const GoogleOnboardingDialog = ({
   userId,
   userEmail,
   userName,
+  userAvatarUrl,
   onComplete,
 }: GoogleOnboardingDialogProps) => {
   const [role, setRole] = useState<UserRole>(UserRole.CITIZEN);
@@ -43,11 +46,21 @@ export const GoogleOnboardingDialog = ({
 
     setIsLoading(true);
     try {
-      // Update profile with department if officer
+      // Update profile with avatar URL from Google and department if officer
+      const profileUpdate: { avatar_url?: string; department?: string } = {};
+      
+      if (userAvatarUrl) {
+        profileUpdate.avatar_url = userAvatarUrl;
+      }
+      
       if (role === UserRole.OFFICER) {
+        profileUpdate.department = department;
+      }
+
+      if (Object.keys(profileUpdate).length > 0) {
         const { error: profileError } = await supabase
           .from("profiles")
-          .update({ department })
+          .update(profileUpdate)
           .eq("id", userId);
 
         if (profileError) throw profileError;
@@ -87,6 +100,16 @@ export const GoogleOnboardingDialog = ({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Google Profile Photo */}
+          <div className="flex justify-center">
+            <Avatar className="w-20 h-20 border-2 border-primary">
+              <AvatarImage src={userAvatarUrl} alt={userName} />
+              <AvatarFallback className="text-xl bg-primary text-primary-foreground">
+                {userName?.split(" ").map(n => n[0]).join("").toUpperCase() || "U"}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+
           <div className="space-y-2">
             <Label>Email</Label>
             <Input value={userEmail} disabled className="bg-muted" />
