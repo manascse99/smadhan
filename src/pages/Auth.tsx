@@ -135,7 +135,7 @@ const Auth = () => {
     }
 
     // Validate admin passkey for officer role
-    if (signupData.role === UserRole.OFFICER && signupData.adminPasskey !== "6GX732") {
+    if (signupData.role === UserRole.OFFICER && signupData.adminPasskey !== "991949") {
       toast.error("Invalid admin passkey. Please contact administrator.");
       return;
     }
