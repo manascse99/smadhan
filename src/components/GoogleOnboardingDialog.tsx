@@ -31,7 +31,7 @@ export const GoogleOnboardingDialog = ({
 
   const handleSubmit = async () => {
     // Validate officer passkey
-    if (role === UserRole.OFFICER && adminPasskey !== "6GX732") {
+    if (role === UserRole.OFFICER && adminPasskey !== "991949") {
       toast.error("Invalid officer passkey. Please contact administrator.");
       return;
     }
