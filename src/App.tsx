@@ -22,6 +22,7 @@ import AdminProfile from "./pages/AdminProfile";
 import AdminReviews from "./pages/AdminReviews";
 import Profile from "./pages/Profile";
 import NotificationsPage from "./pages/NotificationsPage";
+import ManageComplaint from "./pages/ManageComplaint";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,7 @@ const App = () => (
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/profile" element={<AdminProfile />} />
             <Route path="/admin/reviews" element={<AdminReviews />} />
+            <Route path="/admin/manage-complaint/:complaintId" element={<ManageComplaint />} />
             <Route path="/admin-profile" element={<AdminProfile />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="*" element={<NotFound />} />
