@@ -1,22 +1,16 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Search, LogOut, FileText, CheckCircle2, Clock, Image, Upload, X, Video, Plus, Calendar, History, User, AlertTriangle, Wallet, Star, MapPin } from "lucide-react";
+import { Search, LogOut, FileText, CheckCircle2, Clock, User, Star, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Progress } from "@/components/ui/progress";
 import OfficerMetricsCard from "@/components/OfficerMetricsCard";
-import { sendStatusNotification } from "@/utils/notifications";
 import ComplaintsMap from "@/components/ComplaintsMap";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -35,34 +29,11 @@ interface Complaint {
   satisfaction_rating: number | null;
 }
 
-interface ComplaintUpdate {
-  id: string;
-  status: string;
-  remarks: string;
-  proof_url: string | null;
-  proof_urls: string[] | null;
-  created_at: string;
-  admin_id: string;
-}
-
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [remarks, setRemarks] = useState("");
-  const [newStatus, setNewStatus] = useState("");
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [proofFiles, setProofFiles] = useState<File[]>([]);
-  const [proofPreviews, setProofPreviews] = useState<{ url: string; type: string }[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [resolutionSummary, setResolutionSummary] = useState("");
-  const [actionsTaken, setActionsTaken] = useState("");
-  const [previousUpdates, setPreviousUpdates] = useState<ComplaintUpdate[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -86,13 +57,6 @@ const AdminDashboard = () => {
       .on("postgres_changes", { event: "*", schema: "public", table: "complaints" }, () => {
         fetchComplaints();
       })
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "complaint_updates" },
-        () => {
-          fetchComplaints();
-        }
-      )
       .subscribe();
 
     return () => {
@@ -153,187 +117,8 @@ const AdminDashboard = () => {
     navigate("/auth");
   };
 
-  const handleViewDetails = async (complaint: Complaint) => {
-    setSelectedComplaint(complaint);
-    setNewStatus(complaint.status);
-    setRemarks("");
-    setResolutionSummary("");
-    setActionsTaken("");
-    setProofFiles([]);
-    setProofPreviews([]);
-    setUploadProgress(0);
-    setPreviousUpdates([]);
-    setIsDialogOpen(true);
-    
-    // Fetch previous updates for this complaint
-    const { data: updates } = await supabase
-      .from('complaint_updates')
-      .select('*')
-      .eq('complaint_id', complaint.id)
-      .order('created_at', { ascending: false });
-    
-    setPreviousUpdates(updates || []);
-  };
-
-  const handleProofUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-
-    const newFiles: File[] = [];
-    const newPreviews: { url: string; type: string }[] = [];
-
-    Array.from(files).forEach((file) => {
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error(`${file.name} is too large. Max 10MB per file.`);
-        return;
-      }
-
-      const isVideo = file.type.startsWith('video/');
-      const isImage = file.type.startsWith('image/');
-
-      if (!isVideo && !isImage) {
-        toast.error(`${file.name} is not a valid image or video file.`);
-        return;
-      }
-
-      newFiles.push(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        newPreviews.push({
-          url: reader.result as string,
-          type: isVideo ? 'video' : 'image'
-        });
-        if (newPreviews.length === newFiles.length) {
-          setProofFiles(prev => [...prev, ...newFiles]);
-          setProofPreviews(prev => [...prev, ...newPreviews]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
-  const removeProof = (index: number) => {
-    setProofFiles(prev => prev.filter((_, i) => i !== index));
-    setProofPreviews(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleUpdateComplaint = async () => {
-    if (!selectedComplaint || !user) return;
-
-    if (!remarks.trim()) {
-      toast.error("Please enter update remarks");
-      return;
-    }
-
-    setIsUpdating(true);
-    try {
-      const proofUrls: string[] = [];
-
-      // Upload all proof files
-      if (proofFiles.length > 0) {
-        setIsUploading(true);
-        
-        for (let i = 0; i < proofFiles.length; i++) {
-          const file = proofFiles[i];
-          const fileExt = file.name.split('.').pop();
-          const fileName = `${selectedComplaint.id}_${Date.now()}_${i}.${fileExt}`;
-          const filePath = `proofs/${user.id}/${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('complaint-media')
-            .upload(filePath, file);
-
-          if (uploadError) {
-            console.error('Upload error:', uploadError);
-            toast.error(`Failed to upload ${file.name}`);
-            continue;
-          }
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('complaint-media')
-            .getPublicUrl(filePath);
-
-          proofUrls.push(publicUrl);
-          setUploadProgress(Math.round(((i + 1) / proofFiles.length) * 100));
-        }
-        setIsUploading(false);
-      }
-
-      // Build full remarks with resolution details
-      let fullRemarks = remarks;
-      if (resolutionSummary.trim()) {
-        fullRemarks += `\n\n**Resolution Summary:** ${resolutionSummary}`;
-      }
-      if (actionsTaken.trim()) {
-        fullRemarks += `\n\n**Actions Taken:** ${actionsTaken}`;
-      }
-
-      const { error: complaintError } = await supabase
-        .from('complaints')
-        .update({ 
-          status: newStatus as any,
-          resolution_date: newStatus === 'resolved' ? new Date().toISOString() : null
-        })
-        .eq('id', selectedComplaint.id);
-
-      if (complaintError) throw complaintError;
-
-      const { error: updateError } = await supabase
-        .from('complaint_updates')
-        .insert({
-          complaint_id: selectedComplaint.id,
-          admin_id: user.id,
-          status: newStatus as any,
-          remarks: fullRemarks,
-          proof_url: proofUrls.length > 0 ? proofUrls[0] : null,
-          proof_urls: proofUrls.length > 0 ? proofUrls : null,
-        });
-
-      if (updateError) throw updateError;
-
-      // Fetch user details to send notification with email
-      const { data: userData } = await supabase
-        .from('profiles')
-        .select('full_name, email')
-        .eq('id', selectedComplaint.user_id)
-        .single();
-
-      const { data: adminData } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .single();
-
-      // Send notification to the user (both in-app and email)
-      await sendStatusNotification(
-        selectedComplaint.id,
-        selectedComplaint.user_id,
-        userData?.email || '',
-        userData?.full_name || 'Citizen',
-        selectedComplaint.title,
-        selectedComplaint.status,
-        newStatus,
-        fullRemarks,
-        adminData?.full_name || 'Admin'
-      );
-
-      toast.success("Complaint updated successfully");
-      setIsDialogOpen(false);
-      setProofFiles([]);
-      setProofPreviews([]);
-      setUploadProgress(0);
-      fetchComplaints();
-    } catch (error: any) {
-      console.error('Error updating complaint:', error);
-      toast.error(error.message || "Failed to update complaint");
-    } finally {
-      setIsUpdating(false);
-      setIsUploading(false);
-    }
+  const handleViewDetails = (complaint: Complaint) => {
+    navigate(`/admin/manage-complaint/${complaint.id}`);
   };
 
   const getStatusColor = (status: string) => {
@@ -493,376 +278,78 @@ const AdminDashboard = () => {
               </div>
             </div>
 
-        {/* Complaints Table */}
-        <Card className="gradient-card shadow-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-muted/50 border-b border-border">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold">ID</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold">Title</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold">Location</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold">Date</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold">Status</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold">Satisfaction</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredComplaints.map((complaint) => (
-                  <tr key={complaint.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-6 py-4">
-                      <span className="font-mono text-sm">{complaint.id}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="font-medium">{complaint.title}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm text-muted-foreground">{complaint.location_address}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm">{new Date(complaint.created_at).toLocaleDateString()}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Badge className={`${getStatusColor(complaint.status)} text-white`}>
-                        {getStatusLabel(complaint.status)}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4">
-                      {complaint.satisfaction_rating ? (
-                        <div className="flex items-center gap-1">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <Star
-                              key={star}
-                              className={`w-4 h-4 ${
-                                star <= complaint.satisfaction_rating! 
-                                  ? "fill-yellow-400 text-yellow-400" 
-                                  : "text-muted-foreground/30"
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      ) : complaint.status === 'resolved' ? (
-                        <span className="text-xs text-muted-foreground">Pending</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <Button
-                        onClick={() => handleViewDetails(complaint)}
-                        size="sm"
-                        variant="outline"
-                      >
-                        Manage
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+            {/* Complaints Table */}
+            <Card className="gradient-card shadow-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-muted/50 border-b border-border">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-sm font-semibold">ID</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold">Title</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold">Location</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold">Date</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold">Status</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold">Satisfaction</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredComplaints.map((complaint) => (
+                      <tr key={complaint.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-6 py-4">
+                          <span className="font-mono text-sm">{complaint.id}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="font-medium">{complaint.title}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-sm text-muted-foreground">{complaint.location_address}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-sm">{new Date(complaint.created_at).toLocaleDateString()}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <Badge className={`${getStatusColor(complaint.status)} text-white`}>
+                            {getStatusLabel(complaint.status)}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4">
+                          {complaint.satisfaction_rating ? (
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`w-4 h-4 ${
+                                    star <= complaint.satisfaction_rating! 
+                                      ? "fill-yellow-400 text-yellow-400" 
+                                      : "text-muted-foreground/30"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          ) : complaint.status === 'resolved' ? (
+                            <span className="text-xs text-muted-foreground">Pending</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <Button
+                            onClick={() => handleViewDetails(complaint)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            Manage
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
           </TabsContent>
         </Tabs>
-
-        {/* Update Progress Dialog */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Manage Complaint - {selectedComplaint?.id}</DialogTitle>
-            </DialogHeader>
-
-            {selectedComplaint && (
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="font-semibold mb-2">{selectedComplaint.title}</h3>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedComplaint.description}</p>
-                  </div>
-
-                  {/* Attached Media */}
-                  {selectedComplaint.image_urls && selectedComplaint.image_urls.length > 0 && (
-                    <div className="space-y-2">
-                      <Label className="text-muted-foreground flex items-center gap-2">
-                        <Image className="w-4 h-4" />
-                        Attached Media ({selectedComplaint.image_urls.length})
-                      </Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {selectedComplaint.image_urls.map((url, index) => (
-                          <div key={index} className="rounded-lg overflow-hidden border">
-                            <img 
-                              src={url} 
-                              alt={`Complaint Image ${index + 1}`}
-                              className="w-full h-32 object-cover hover:scale-105 transition-transform cursor-pointer"
-                              onClick={() => window.open(url, '_blank')}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <Label className="text-muted-foreground">Complaint ID</Label>
-                      <p className="font-medium font-mono">{selectedComplaint.id}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Category</Label>
-                      <p className="font-medium">{selectedComplaint.category}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Location</Label>
-                      <p className="font-medium">{selectedComplaint.location_address}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Date Filed</Label>
-                      <p className="font-medium">{new Date(selectedComplaint.created_at).toLocaleDateString()}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Current Status</Label>
-                      <Badge className={`${getStatusColor(selectedComplaint.status)} text-white`}>
-                        {getStatusLabel(selectedComplaint.status)}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Previous Updates Section */}
-                {previousUpdates.length > 0 && (
-                  <div className="space-y-4 pt-4 border-t">
-                    <div className="flex items-center gap-2">
-                      <History className="w-5 h-5 text-primary" />
-                      <h3 className="font-semibold">Previous Updates ({previousUpdates.length})</h3>
-                    </div>
-                    
-                    <div className="max-h-64 overflow-y-auto space-y-3 pr-2">
-                      {previousUpdates.map((update, index) => (
-                        <div 
-                          key={update.id} 
-                          className="p-3 bg-muted/30 rounded-lg border border-border/50"
-                        >
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <Badge className={`${getStatusColor(update.status)} text-white text-xs`}>
-                              {getStatusLabel(update.status)}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              {new Date(update.created_at).toLocaleDateString()} at {new Date(update.created_at).toLocaleTimeString()}
-                            </span>
-                          </div>
-                          
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-3">
-                            {update.remarks}
-                          </p>
-                          
-                          {/* Show previous proof files */}
-                          {(update.proof_urls && update.proof_urls.length > 0) || update.proof_url ? (
-                            <div className="mt-2 pt-2 border-t border-border/50">
-                              <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                                <Image className="w-3 h-3" />
-                                Proof uploaded ({update.proof_urls?.length || 1} file(s))
-                              </p>
-                              <div className="flex gap-1 flex-wrap">
-                                {(update.proof_urls || [update.proof_url]).filter(Boolean).map((url, idx) => {
-                                  const isVideo = url?.includes('.mp4') || url?.includes('.webm') || url?.includes('.mov');
-                                  return (
-                                    <div key={idx} className="w-16 h-16 rounded border overflow-hidden">
-                                      {isVideo ? (
-                                        <div className="w-full h-full bg-muted flex items-center justify-center">
-                                          <Video className="w-5 h-5 text-muted-foreground" />
-                                        </div>
-                                      ) : (
-                                        <img 
-                                          src={url!} 
-                                          alt={`Previous proof ${idx + 1}`}
-                                          className="w-full h-full object-cover cursor-pointer hover:opacity-80"
-                                          onClick={() => window.open(url!, '_blank')}
-                                        />
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-4 pt-4 border-t">
-                  <div className="space-y-2">
-                    <Label htmlFor="status">Update Status</Label>
-                    <Select value={newStatus} onValueChange={setNewStatus}>
-                      <SelectTrigger className="bg-background">
-                        <SelectValue placeholder="Select new status" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-background border shadow-lg z-50">
-                        <SelectItem value="filed">
-                          <div className="flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-status-filed" />
-                            <span>Filed</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="verified">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-status-verified" />
-                            <span>Verified</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="processing">
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-status-processing" />
-                            <span>In Progress</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="escalated">
-                          <div className="flex items-center gap-2">
-                            <AlertTriangle className="w-4 h-4 text-orange-500" />
-                            <span>Escalated (Higher Authority)</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="fund_required">
-                          <div className="flex items-center gap-2">
-                            <Wallet className="w-4 h-4 text-purple-500" />
-                            <span>Fund Required</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="resolved">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-status-resolved" />
-                            <span>Resolved</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="remarks">Update Message / Remarks *</Label>
-                    <Textarea
-                      id="remarks"
-                      placeholder="Enter update details for the citizen..."
-                      value={remarks}
-                      onChange={(e) => setRemarks(e.target.value)}
-                      rows={3}
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="resolutionSummary">Resolution Summary (Optional)</Label>
-                    <Textarea
-                      id="resolutionSummary"
-                      placeholder="Describe what was resolved or fixed..."
-                      value={resolutionSummary}
-                      onChange={(e) => setResolutionSummary(e.target.value)}
-                      rows={2}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="actionsTaken">Actions Taken (Optional)</Label>
-                    <Textarea
-                      id="actionsTaken"
-                      placeholder="List the steps taken to resolve this issue..."
-                      value={actionsTaken}
-                      onChange={(e) => setActionsTaken(e.target.value)}
-                      rows={2}
-                    />
-                  </div>
-
-                  {/* Proof Upload Section */}
-                  <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="flex items-center gap-2">
-                          <Upload className="w-4 h-4" />
-                          Upload Proof Media (Optional)
-                        </Label>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Upload images or videos showing resolution progress
-                        </p>
-                      </div>
-                      <Badge variant="secondary">{proofFiles.length} file(s)</Badge>
-                    </div>
-                    
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleProofUpload}
-                      accept="image/*,video/*"
-                      multiple
-                      className="hidden"
-                    />
-                    
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full border-dashed"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Images / Videos
-                    </Button>
-
-                    {/* Preview Grid */}
-                    {proofPreviews.length > 0 && (
-                      <div className="grid grid-cols-3 gap-2 mt-3">
-                        {proofPreviews.map((preview, index) => (
-                          <div key={index} className="relative group">
-                            {preview.type === 'video' ? (
-                              <div className="h-24 rounded-lg bg-muted flex items-center justify-center border">
-                                <Video className="w-8 h-8 text-muted-foreground" />
-                              </div>
-                            ) : (
-                              <img 
-                                src={preview.url} 
-                                alt={`Proof ${index + 1}`} 
-                                className="h-24 w-full rounded-lg object-cover border"
-                              />
-                            )}
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="icon"
-                              className="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={() => removeProof(index)}
-                            >
-                              <X className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Upload Progress */}
-                    {isUploading && (
-                      <div className="space-y-2">
-                        <Progress value={uploadProgress} className="h-2" />
-                        <p className="text-xs text-muted-foreground text-center">
-                          Uploading... {uploadProgress}%
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  <Button 
-                    onClick={handleUpdateComplaint} 
-                    className="w-full" 
-                    size="lg"
-                    disabled={isUpdating || isUploading}
-                  >
-                    {isUploading ? "Uploading Proof..." : isUpdating ? "Updating..." : "Submit Update"}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
       </main>
 
       <Footer />
