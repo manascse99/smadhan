@@ -31,7 +31,11 @@ import {
   ClipboardList,
   DollarSign,
   Users,
-  Briefcase
+  Briefcase,
+  ArrowUp,
+  Minus,
+  ArrowDown,
+  Timer
 } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
@@ -42,6 +46,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { sendStatusNotification } from "@/utils/notifications";
 import { Separator } from "@/components/ui/separator";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { format, addDays } from "date-fns";
+import { cn } from "@/lib/utils";
+import PriorityBadge from "@/components/PriorityBadge";
+import SLAIndicator from "@/components/SLAIndicator";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 interface Complaint {
   id: string;
@@ -58,6 +69,8 @@ interface Complaint {
   assigned_to: string | null;
   image_urls: string[] | null;
   satisfaction_rating: number | null;
+  priority: "low" | "medium" | "high" | "critical" | null;
+  sla_deadline: string | null;
 }
 
 interface ComplaintUpdate {
@@ -97,6 +110,8 @@ const ManageComplaint = () => {
   const [escalationReason, setEscalationReason] = useState("");
   const [fundAmount, setFundAmount] = useState("");
   const [fundPurpose, setFundPurpose] = useState("");
+  const [priority, setPriority] = useState<"low" | "medium" | "high" | "critical" | "">("");
+  const [slaDeadline, setSlaDeadline] = useState<Date | undefined>(undefined);
   
   const [isUpdating, setIsUpdating] = useState(false);
   const [proofFiles, setProofFiles] = useState<File[]>([]);
@@ -136,8 +151,20 @@ const ManageComplaint = () => {
         .single();
 
       if (complaintError) throw complaintError;
-      setComplaint(complaintData);
+      
+      // Cast priority to proper type
+      const typedComplaint: Complaint = {
+        ...complaintData,
+        priority: complaintData.priority as "low" | "medium" | "high" | "critical" | null,
+        sla_deadline: complaintData.sla_deadline,
+      };
+      
+      setComplaint(typedComplaint);
       setNewStatus(complaintData.status);
+      setPriority(complaintData.priority as "low" | "medium" | "high" | "critical" || "");
+      if (complaintData.sla_deadline) {
+        setSlaDeadline(new Date(complaintData.sla_deadline));
+      }
 
       // Fetch citizen profile
       const { data: profileData } = await supabase
@@ -292,12 +319,24 @@ const ManageComplaint = () => {
         fullRemarks += `\n**Fund Purpose:** ${fundPurpose}`;
       }
 
+      const updateData: Record<string, any> = { 
+        status: newStatus as any,
+        resolution_date: newStatus === 'resolved' ? new Date().toISOString() : null
+      };
+      
+      // Add priority if set
+      if (priority) {
+        updateData.priority = priority;
+      }
+      
+      // Add SLA deadline if set
+      if (slaDeadline) {
+        updateData.sla_deadline = slaDeadline.toISOString();
+      }
+
       const { error: complaintError } = await supabase
         .from('complaints')
-        .update({ 
-          status: newStatus as any,
-          resolution_date: newStatus === 'resolved' ? new Date().toISOString() : null
-        })
+        .update(updateData)
         .eq('id', complaint.id);
 
       if (complaintError) throw complaintError;
@@ -409,6 +448,7 @@ const ManageComplaint = () => {
   }
 
   return (
+    <TooltipProvider>
     <div className="min-h-screen flex flex-col bg-muted/30">
       <Navbar />
 
@@ -479,6 +519,35 @@ const ManageComplaint = () => {
                   </Label>
                   <p className="font-medium">{complaint.location_address}</p>
                 </div>
+
+                {/* Priority and SLA Display */}
+                {(complaint.priority || complaint.sla_deadline) && (
+                  <>
+                    <Separator />
+                    <div className="grid grid-cols-2 gap-4">
+                      {complaint.priority && (
+                        <div>
+                          <Label className="text-muted-foreground text-xs flex items-center gap-1">
+                            <ArrowUp className="w-3 h-3" /> Priority
+                          </Label>
+                          <div className="mt-1">
+                            <PriorityBadge priority={complaint.priority} />
+                          </div>
+                        </div>
+                      )}
+                      {complaint.sla_deadline && (
+                        <div>
+                          <Label className="text-muted-foreground text-xs flex items-center gap-1">
+                            <Timer className="w-3 h-3" /> SLA Deadline
+                          </Label>
+                          <div className="mt-1">
+                            <SLAIndicator slaDeadline={complaint.sla_deadline} status={complaint.status} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </Card>
 
@@ -644,6 +713,126 @@ const ManageComplaint = () => {
                       </SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                {/* Priority and SLA Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 border rounded-lg bg-muted/20">
+                  {/* Priority Selection */}
+                  <div className="space-y-2">
+                    <Label htmlFor="priority" className="text-base font-medium flex items-center gap-2">
+                      <ArrowUp className="w-4 h-4" />
+                      Priority Level
+                    </Label>
+                    <Select value={priority} onValueChange={(val) => setPriority(val as "low" | "medium" | "high" | "critical")}>
+                      <SelectTrigger className="bg-background h-12">
+                        <SelectValue placeholder="Select priority" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background border shadow-lg z-50">
+                        <SelectItem value="low">
+                          <div className="flex items-center gap-2">
+                            <ArrowDown className="w-4 h-4 text-muted-foreground" />
+                            <span>Low</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="medium">
+                          <div className="flex items-center gap-2">
+                            <Minus className="w-4 h-4 text-accent-foreground" />
+                            <span>Medium</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="high">
+                          <div className="flex items-center gap-2">
+                            <ArrowUp className="w-4 h-4 text-status-processing" />
+                            <span>High</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="critical">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 text-destructive" />
+                            <span>Critical</span>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {priority && (
+                      <div className="mt-2">
+                        <PriorityBadge priority={priority || null} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SLA Deadline */}
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium flex items-center gap-2">
+                      <Timer className="w-4 h-4" />
+                      SLA Deadline
+                    </Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full h-12 justify-start text-left font-normal",
+                            !slaDeadline && "text-muted-foreground"
+                          )}
+                        >
+                          <Calendar className="mr-2 h-4 w-4" />
+                          {slaDeadline ? format(slaDeadline, "PPP") : "Select deadline"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 bg-background" align="start">
+                        <CalendarComponent
+                          mode="single"
+                          selected={slaDeadline}
+                          onSelect={setSlaDeadline}
+                          disabled={(date) => date < new Date()}
+                          initialFocus
+                        />
+                        <div className="p-3 border-t space-y-2">
+                          <p className="text-xs text-muted-foreground">Quick set:</p>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSlaDeadline(addDays(new Date(), 1))}
+                            >
+                              24h
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSlaDeadline(addDays(new Date(), 3))}
+                            >
+                              3 days
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSlaDeadline(addDays(new Date(), 7))}
+                            >
+                              1 week
+                            </Button>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    {slaDeadline && complaint && (
+                      <div className="mt-2">
+                        <SLAIndicator slaDeadline={slaDeadline.toISOString()} status={newStatus || complaint.status} />
+                      </div>
+                    )}
+                    {slaDeadline && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-muted-foreground"
+                        onClick={() => setSlaDeadline(undefined)}
+                      >
+                        <X className="w-3 h-3 mr-1" />
+                        Clear deadline
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 <Separator />
@@ -903,6 +1092,7 @@ const ManageComplaint = () => {
 
       <Footer />
     </div>
+    </TooltipProvider>
   );
 };
 

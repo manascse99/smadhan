@@ -96,8 +96,10 @@ export type Database = {
           location_address: string
           location_lat: number | null
           location_lng: number | null
+          priority: string | null
           resolution_date: string | null
           satisfaction_rating: number | null
+          sla_deadline: string | null
           status: Database["public"]["Enums"]["complaint_status"]
           title: string
           updated_at: string
@@ -117,8 +119,10 @@ export type Database = {
           location_address: string
           location_lat?: number | null
           location_lng?: number | null
+          priority?: string | null
           resolution_date?: string | null
           satisfaction_rating?: number | null
+          sla_deadline?: string | null
           status?: Database["public"]["Enums"]["complaint_status"]
           title: string
           updated_at?: string
@@ -138,8 +142,10 @@ export type Database = {
           location_address?: string
           location_lat?: number | null
           location_lng?: number | null
+          priority?: string | null
           resolution_date?: string | null
           satisfaction_rating?: number | null
+          sla_deadline?: string | null
           status?: Database["public"]["Enums"]["complaint_status"]
           title?: string
           updated_at?: string

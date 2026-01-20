@@ -13,6 +13,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import OfficerMetricsCard from "@/components/OfficerMetricsCard";
 import ComplaintsMap from "@/components/ComplaintsMap";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import PriorityBadge from "@/components/PriorityBadge";
+import SLAIndicator from "@/components/SLAIndicator";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 interface Complaint {
   id: string;
@@ -27,6 +30,8 @@ interface Complaint {
   assigned_to: string | null;
   image_urls: string[] | null;
   satisfaction_rating: number | null;
+  priority: "low" | "medium" | "high" | "critical" | null;
+  sla_deadline: string | null;
 }
 
 const AdminDashboard = () => {
@@ -97,7 +102,15 @@ const AdminDashboard = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setComplaints(data || []);
+      
+      // Cast the data to proper types
+      const typedComplaints: Complaint[] = (data || []).map(c => ({
+        ...c,
+        priority: c.priority as "low" | "medium" | "high" | "critical" | null,
+        sla_deadline: c.sla_deadline,
+      }));
+      
+      setComplaints(typedComplaints);
     } catch (error: any) {
       console.error('Error fetching complaints:', error);
       toast.error("Failed to load complaints");
@@ -148,6 +161,7 @@ const AdminDashboard = () => {
   if (!isAuthenticated || !user) return null;
 
   return (
+    <TooltipProvider>
     <div className="min-h-screen flex flex-col bg-muted/30">
       <Navbar />
 
@@ -284,36 +298,47 @@ const AdminDashboard = () => {
                 <table className="w-full">
                   <thead className="bg-muted/50 border-b border-border">
                     <tr>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">ID</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Title</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Location</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Date</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Status</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Satisfaction</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Action</th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold">ID</th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold">Title</th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold">Priority</th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold">SLA</th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold">Status</th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold">Satisfaction</th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {filteredComplaints.map((complaint) => (
                       <tr key={complaint.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-4">
                           <span className="font-mono text-sm">{complaint.id}</span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-4">
                           <p className="font-medium">{complaint.title}</p>
+                          <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                            {complaint.location_address}
+                          </p>
                         </td>
-                        <td className="px-6 py-4">
-                          <p className="text-sm text-muted-foreground">{complaint.location_address}</p>
+                        <td className="px-4 py-4">
+                          <PriorityBadge priority={complaint.priority} showLabel={false} />
+                          {!complaint.priority && <span className="text-xs text-muted-foreground">-</span>}
                         </td>
-                        <td className="px-6 py-4">
-                          <p className="text-sm">{new Date(complaint.created_at).toLocaleDateString()}</p>
+                        <td className="px-4 py-4">
+                          <SLAIndicator 
+                            slaDeadline={complaint.sla_deadline} 
+                            status={complaint.status} 
+                            compact 
+                          />
+                          {!complaint.sla_deadline && complaint.status !== 'resolved' && (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-4">
                           <Badge className={`${getStatusColor(complaint.status)} text-white`}>
                             {getStatusLabel(complaint.status)}
                           </Badge>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-4">
                           {complaint.satisfaction_rating ? (
                             <div className="flex items-center gap-1">
                               {[1, 2, 3, 4, 5].map((star) => (
@@ -333,7 +358,7 @@ const AdminDashboard = () => {
                             <span className="text-xs text-muted-foreground">-</span>
                           )}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-4">
                           <Button
                             onClick={() => handleViewDetails(complaint)}
                             size="sm"
@@ -354,6 +379,7 @@ const AdminDashboard = () => {
 
       <Footer />
     </div>
+    </TooltipProvider>
   );
 };
 
