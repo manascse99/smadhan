@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Send, X, User, Mail, Phone } from "lucide-react";
+import { Upload, Send, X, User, Mail, Phone, Sparkles } from "lucide-react";
+import ImageValidationBadge from "@/components/ImageValidationBadge";
+import { useImageValidation } from "@/hooks/useImageValidation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +38,7 @@ const FileComplaint = () => {
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
   const previewInputRef = useRef<HTMLInputElement | null>(null);
   const [charCount, setCharCount] = useState(0);
+  const { validationResults, validatingIndexes, validateImage, removeValidation, hasBlockingMismatch } = useImageValidation();
 
   const categories = [
     "Water Supply",
@@ -80,11 +83,17 @@ const FileComplaint = () => {
     }
 
     const newUrls = files.map((file) => URL.createObjectURL(file));
+    const startIndex = images.length;
     setImages((prev) => [...prev, ...files]);
     setImagePreviewUrls((prev) => [...prev, ...newUrls]);
 
+    // Trigger AI validation for each new image
+    files.forEach((file, i) => {
+      validateImage(file, startIndex + i, formData.category);
+    });
+
     toast.success(`${files.length} image(s) added`);
-    e.target.value = ""; // allow re-selecting the same file
+    e.target.value = "";
   };
 
   const removeImage = (index: number) => {
@@ -94,7 +103,39 @@ const FileComplaint = () => {
       if (url) URL.revokeObjectURL(url);
       return prev.filter((_, i) => i !== index);
     });
+    removeValidation(index);
     toast.success("Image removed");
+  };
+
+  // Re-validate images when category changes
+  useEffect(() => {
+    if (formData.category && images.length > 0) {
+      images.forEach((file, idx) => {
+        validateImage(file, idx, formData.category);
+      });
+    }
+  }, [formData.category]);
+
+  const handleApplySuggestion = (description: string) => {
+    if (!formData.description) {
+      setFormData((prev) => ({ ...prev, description }));
+      setCharCount(description.length);
+      toast.success("AI description applied!");
+    } else {
+      const combined = `${formData.description}\n${description}`;
+      if (combined.length <= 1000) {
+        setFormData((prev) => ({ ...prev, description: combined }));
+        setCharCount(combined.length);
+        toast.success("AI description appended!");
+      } else {
+        toast.error("Description would exceed 1000 characters");
+      }
+    }
+  };
+
+  const handleApplyCategory = (category: string) => {
+    setFormData((prev) => ({ ...prev, category }));
+    toast.success(`Category changed to "${category}"`);
   };
 
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -145,6 +186,11 @@ const FileComplaint = () => {
 
     if (!/\S+@\S+\.\S+/.test(formData.email)) {
       toast.error("Please enter a valid email address");
+      return false;
+    }
+
+    if (hasBlockingMismatch()) {
+      toast.error("One or more images don't match the selected category. Please review or remove them.");
       return false;
     }
 
@@ -420,10 +466,17 @@ const FileComplaint = () => {
                         <button
                           type="button"
                           onClick={() => removeImage(idx)}
-                          className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
                         >
                           <X className="w-4 h-4" />
                         </button>
+                        <ImageValidationBadge
+                          result={validationResults[idx] ?? null}
+                          isValidating={validatingIndexes.has(idx)}
+                          onApplySuggestion={handleApplySuggestion}
+                          onApplyCategory={handleApplyCategory}
+                          currentCategory={formData.category}
+                        />
                       </div>
                     ))}
                   </div>
