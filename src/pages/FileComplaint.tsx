@@ -189,6 +189,11 @@ const FileComplaint = () => {
       return false;
     }
 
+    if (hasBlockingMismatch()) {
+      toast.error("One or more images don't match the selected category. Please review or remove them.");
+      return false;
+    }
+
     return true;
   };
 
