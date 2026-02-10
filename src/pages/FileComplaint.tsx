@@ -83,11 +83,17 @@ const FileComplaint = () => {
     }
 
     const newUrls = files.map((file) => URL.createObjectURL(file));
+    const startIndex = images.length;
     setImages((prev) => [...prev, ...files]);
     setImagePreviewUrls((prev) => [...prev, ...newUrls]);
 
+    // Trigger AI validation for each new image
+    files.forEach((file, i) => {
+      validateImage(file, startIndex + i, formData.category);
+    });
+
     toast.success(`${files.length} image(s) added`);
-    e.target.value = ""; // allow re-selecting the same file
+    e.target.value = "";
   };
 
   const removeImage = (index: number) => {
