@@ -466,10 +466,17 @@ const FileComplaint = () => {
                         <button
                           type="button"
                           onClick={() => removeImage(idx)}
-                          className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
                         >
                           <X className="w-4 h-4" />
                         </button>
+                        <ImageValidationBadge
+                          result={validationResults[idx] ?? null}
+                          isValidating={validatingIndexes.has(idx)}
+                          onApplySuggestion={handleApplySuggestion}
+                          onApplyCategory={handleApplyCategory}
+                          currentCategory={formData.category}
+                        />
                       </div>
                     ))}
                   </div>
