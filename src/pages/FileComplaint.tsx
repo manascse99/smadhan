@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Send, X, User, Mail, Phone } from "lucide-react";
+import { Upload, Send, X, User, Mail, Phone, Sparkles } from "lucide-react";
+import ImageValidationBadge from "@/components/ImageValidationBadge";
+import { useImageValidation } from "@/hooks/useImageValidation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
