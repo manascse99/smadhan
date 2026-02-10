@@ -103,7 +103,39 @@ const FileComplaint = () => {
       if (url) URL.revokeObjectURL(url);
       return prev.filter((_, i) => i !== index);
     });
+    removeValidation(index);
     toast.success("Image removed");
+  };
+
+  // Re-validate images when category changes
+  useEffect(() => {
+    if (formData.category && images.length > 0) {
+      images.forEach((file, idx) => {
+        validateImage(file, idx, formData.category);
+      });
+    }
+  }, [formData.category]);
+
+  const handleApplySuggestion = (description: string) => {
+    if (!formData.description) {
+      setFormData((prev) => ({ ...prev, description }));
+      setCharCount(description.length);
+      toast.success("AI description applied!");
+    } else {
+      const combined = `${formData.description}\n${description}`;
+      if (combined.length <= 1000) {
+        setFormData((prev) => ({ ...prev, description: combined }));
+        setCharCount(combined.length);
+        toast.success("AI description appended!");
+      } else {
+        toast.error("Description would exceed 1000 characters");
+      }
+    }
+  };
+
+  const handleApplyCategory = (category: string) => {
+    setFormData((prev) => ({ ...prev, category }));
+    toast.success(`Category changed to "${category}"`);
   };
 
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
