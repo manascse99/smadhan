@@ -38,6 +38,7 @@ const FileComplaint = () => {
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
   const previewInputRef = useRef<HTMLInputElement | null>(null);
   const [charCount, setCharCount] = useState(0);
+  const { validationResults, validatingIndexes, validateImage, removeValidation, hasBlockingMismatch } = useImageValidation();
 
   const categories = [
     "Water Supply",
