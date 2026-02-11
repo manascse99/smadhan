@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Send, X, User, Mail, Phone, Sparkles } from "lucide-react";
+import { Upload, Send, X, User, Mail, Phone, Sparkles, ShieldCheck, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import ImageValidationBadge from "@/components/ImageValidationBadge";
 import { useImageValidation } from "@/hooks/useImageValidation";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,8 @@ const FileComplaint = () => {
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<'idle' | 'verified' | 'failed' | 'warning'>('idle');
   const [formData, setFormData] = useState({
     fullName: "",
     mobile: "",
@@ -104,12 +106,14 @@ const FileComplaint = () => {
       return prev.filter((_, i) => i !== index);
     });
     removeValidation(index);
+    setVerificationStatus('idle');
     toast.success("Image removed");
   };
 
   // Re-validate images when category changes
   useEffect(() => {
     if (formData.category && images.length > 0) {
+      setVerificationStatus('idle');
       images.forEach((file, idx) => {
         validateImage(file, idx, formData.category);
       });
@@ -172,6 +176,71 @@ const FileComplaint = () => {
     return uploadedUrls;
   };
 
+  const handleVerifyComplaint = async () => {
+    if (images.length === 0) {
+      toast.error("Please upload at least one image to verify");
+      return;
+    }
+    if (!formData.category) {
+      toast.error("Please select a category first");
+      return;
+    }
+
+    setIsVerifying(true);
+    setVerificationStatus('idle');
+
+    try {
+      // Validate all images and collect results directly
+      const results: Array<{ match: boolean; confidence: number; imageQuality: string } | null> = [];
+
+      for (let idx = 0; idx < images.length; idx++) {
+        try {
+          const base64 = await fileToBase64(images[idx]);
+          const { data, error } = await supabase.functions.invoke("validate-complaint-image", {
+            body: { imageBase64: base64, category: formData.category },
+          });
+          if (error) throw error;
+          results.push(data);
+        } catch {
+          results.push(null);
+        }
+      }
+
+      let allPassed = true;
+      let anyWarning = false;
+
+      for (const r of results) {
+        if (r && !r.match && r.confidence >= 0.8) {
+          allPassed = false;
+          break;
+        }
+        if (r && (!r.match || r.imageQuality === 'blurry' || r.imageQuality === 'dark' || r.imageQuality === 'unclear')) {
+          anyWarning = true;
+        }
+      }
+
+      if (!allPassed) {
+        setVerificationStatus('failed');
+        toast.error("Verification failed! The uploaded image(s) don't match your complaint category. Please upload real images related to your issue.");
+      } else if (anyWarning) {
+        setVerificationStatus('warning');
+        toast.warning("Images verified with warnings. You can still submit, but consider uploading clearer images.");
+      } else if (results.every(r => r === null)) {
+        toast.error("Could not verify images. Please try again.");
+        setVerificationStatus('idle');
+      } else {
+        setVerificationStatus('verified');
+        toast.success("✅ All images verified successfully! Your complaint is ready to submit.");
+      }
+    } catch (err) {
+      console.error("Verification error:", err);
+      toast.error("Verification failed. Please try again.");
+      setVerificationStatus('idle');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   const validateForm = (): boolean => {
     if (!formData.fullName || !formData.mobile || !formData.email || 
         !formData.title || !formData.category || !formData.description || !formData.location) {
@@ -189,8 +258,13 @@ const FileComplaint = () => {
       return false;
     }
 
+    if (images.length > 0 && verificationStatus === 'idle') {
+      toast.error("Please verify your images before submitting");
+      return false;
+    }
+
     if (hasBlockingMismatch()) {
-      toast.error("One or more images don't match the selected category. Please review or remove them.");
+      toast.error("One or more images don't match the selected category. Please upload real images.");
       return false;
     }
 
@@ -487,17 +561,74 @@ const FileComplaint = () => {
                 </p>
               </div>
 
-              {/* Submit Button */}
-              <div className="flex flex-col gap-4 pt-6">
+              {/* Verification Status Banner */}
+              {verificationStatus === 'verified' && (
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400">
+                  <CheckCircle2 className="w-5 h-5 shrink-0" />
+                  <div>
+                    <p className="font-medium">Images Verified Successfully</p>
+                    <p className="text-sm opacity-80">Your complaint images match the selected category. Ready to submit!</p>
+                  </div>
+                </div>
+              )}
+              {verificationStatus === 'failed' && (
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive">
+                  <AlertTriangle className="w-5 h-5 shrink-0" />
+                  <div>
+                    <p className="font-medium">Verification Failed</p>
+                    <p className="text-sm opacity-80">The uploaded images don't appear to match your complaint category. Please upload real images related to your issue.</p>
+                  </div>
+                </div>
+              )}
+              {verificationStatus === 'warning' && (
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-400">
+                  <AlertTriangle className="w-5 h-5 shrink-0" />
+                  <div>
+                    <p className="font-medium">Verified with Warnings</p>
+                    <p className="text-sm opacity-80">Some images may have quality issues. You can still submit your complaint.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Verify & Submit Buttons */}
+              <div className="flex flex-col gap-3 pt-6">
+                {images.length > 0 && (
+                  <Button
+                    type="button"
+                    onClick={handleVerifyComplaint}
+                    disabled={isVerifying || images.length === 0 || !formData.category}
+                    variant={verificationStatus === 'verified' ? 'outline' : 'secondary'}
+                    className="w-full"
+                    size="lg"
+                  >
+                    {isVerifying ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        AI is Analyzing Images...
+                      </>
+                    ) : verificationStatus === 'verified' ? (
+                      <>
+                        <CheckCircle2 className="w-5 h-5 mr-2" />
+                        Re-Verify Images
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-5 h-5 mr-2" />
+                        Verify Complaint Images
+                      </>
+                    )}
+                  </Button>
+                )}
+
                 <Button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || (images.length > 0 && verificationStatus !== 'verified' && verificationStatus !== 'warning')}
                   className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90"
                   size="lg"
                 >
                   {isSubmitting ? (
                     <>
-                      <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                       Submitting Complaint...
                     </>
                   ) : (
@@ -508,7 +639,9 @@ const FileComplaint = () => {
                   )}
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
-                  Your complaint will be automatically assigned to the relevant department
+                  {images.length > 0 && verificationStatus === 'idle'
+                    ? "Please verify your images before submitting"
+                    : "Your complaint will be automatically assigned to the relevant department"}
                 </p>
               </div>
             </form>
@@ -530,5 +663,14 @@ const FileComplaint = () => {
     </div>
   );
 };
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 export default FileComplaint;
