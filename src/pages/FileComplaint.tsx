@@ -221,7 +221,7 @@ const FileComplaint = () => {
 
       if (!allPassed) {
         setVerificationStatus('failed');
-        toast.error("Verification failed! The uploaded image(s) don't match your complaint category. Please upload real images related to your issue.");
+        toast.error("Image doesn't match the selected category! Upload a relevant image or switch to 'Other' category.");
       } else if (anyWarning) {
         setVerificationStatus('warning');
         toast.warning("Images verified with warnings. You can still submit, but consider uploading clearer images.");
@@ -572,11 +572,30 @@ const FileComplaint = () => {
                 </div>
               )}
               {verificationStatus === 'failed' && (
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive">
-                  <AlertTriangle className="w-5 h-5 shrink-0" />
-                  <div>
-                    <p className="font-medium">Verification Failed</p>
-                    <p className="text-sm opacity-80">The uploaded images don't appear to match your complaint category. Please upload real images related to your issue.</p>
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive">
+                  <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+                  <div className="space-y-2">
+                    <p className="font-medium">Image Does Not Match Category</p>
+                    <p className="text-sm opacity-80">
+                      The uploaded image(s) do not match the selected category "<strong>{formData.category}</strong>". Please:
+                    </p>
+                    <ul className="text-sm opacity-80 list-disc list-inside space-y-1">
+                      <li>Upload a real image that matches your selected category</li>
+                      <li>Or change the category to "<strong>Other</strong>" if your issue doesn't fit standard categories</li>
+                    </ul>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-1 border-destructive/40 text-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, category: "Other" }));
+                        setVerificationStatus('idle');
+                        toast.info('Category changed to "Other". You can now re-verify or submit.');
+                      }}
+                    >
+                      Switch to "Other" Category
+                    </Button>
                   </div>
                 </div>
               )}
