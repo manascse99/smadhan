@@ -155,7 +155,7 @@ export const ComplaintCard = ({ complaint, onUpvote, onFeedbackSubmit }: Complai
           </div>
 
           {/* Satisfaction Survey for Resolved Complaints */}
-          {needsFeedback && !showSurvey && (
+          {needsFeedback && (
             <div className="mt-4 p-3 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-lg border border-green-500/20">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
