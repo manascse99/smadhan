@@ -53,6 +53,7 @@ import { cn } from "@/lib/utils";
 import PriorityBadge from "@/components/PriorityBadge";
 import SLAIndicator from "@/components/SLAIndicator";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SurveyResultsCard } from "@/components/SurveyResultsCard";
 
 interface Complaint {
   id: string;
