@@ -104,6 +104,46 @@ const About = () => {
           </div>
         </section>
 
+        {/* Services We Provide */}
+        <section className="py-20 bg-background">
+          <div className="container mx-auto px-4">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold mb-4">Services We Provide</h2>
+              <p className="text-xl text-muted-foreground">
+                A comprehensive platform delivering end-to-end grievance management
+              </p>
+            </div>
+
+            <div className="max-w-4xl mx-auto space-y-4">
+              {[
+                { icon: FileText, title: "Online Complaint Filing", desc: "Citizens can file detailed grievances with title, description, category, location, and photo/video evidence through an intuitive digital form." },
+                { icon: Search, title: "Real-Time Complaint Tracking", desc: "Track your complaint status live through every stage — filed, verified, processing, resolved — with transparent timelines and updates." },
+                { icon: Brain, title: "AI-Powered Image Validation", desc: "Uploaded images are automatically analyzed by AI (Google Gemini) to verify relevance, detect quality issues, and suggest the correct complaint category." },
+                { icon: MapPin, title: "Location-Based Mapping", desc: "Interactive maps display complaints geographically, helping departments identify problem hotspots and allocate resources efficiently." },
+                { icon: Shield, title: "Blockchain-Verified Records", desc: "Every complaint and update is recorded on an immutable ledger, ensuring full transparency and preventing any tampering with records." },
+                { icon: Bell, title: "Smart Notifications & Alerts", desc: "Citizens receive real-time notifications on status changes, SLA deadlines, and resolution updates via in-app alerts and email." },
+                { icon: Star, title: "Citizen Satisfaction Surveys", desc: "After resolution, citizens rate their experience across multiple dimensions — speed, staff behavior, quality — providing actionable feedback." },
+                { icon: BarChart3, title: "Transparency Dashboard & Analytics", desc: "Public dashboards display department performance, resolution rates, average response times, and citizen satisfaction metrics." },
+                { icon: Lock, title: "Role-Based Access & Security", desc: "Secure authentication with role-based access (Citizen, Officer, Admin, Government) ensures data privacy and proper authorization at every level." },
+                { icon: HeadphonesIcon, title: "Multi-Department Coordination", desc: "Complaints are auto-routed to the right department with SLA tracking, escalation workflows, and inter-department collaboration tools." },
+              ].map((service, index) => {
+                const Icon = service.icon;
+                return (
+                  <Card key={index} className="gradient-card p-6 flex items-start gap-4 hover:shadow-lg transition-all">
+                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Icon className="w-6 h-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg mb-1">{index + 1}. {service.title}</h3>
+                      <p className="text-muted-foreground leading-relaxed text-sm">{service.desc}</p>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
         {/* Vision Section */}
         <section className="py-20 bg-muted/50">
           <div className="container mx-auto px-4">
