@@ -314,6 +314,56 @@ export type Database = {
         }
         Relationships: []
       }
+      satisfaction_surveys: {
+        Row: {
+          complaint_id: string
+          created_at: string
+          feedback: string | null
+          id: string
+          overall_rating: number
+          resolution_quality: string
+          speed_rating: number
+          staff_rating: number
+          suggestions: string | null
+          user_id: string
+          would_recommend: string
+        }
+        Insert: {
+          complaint_id: string
+          created_at?: string
+          feedback?: string | null
+          id?: string
+          overall_rating: number
+          resolution_quality: string
+          speed_rating: number
+          staff_rating: number
+          suggestions?: string | null
+          user_id: string
+          would_recommend: string
+        }
+        Update: {
+          complaint_id?: string
+          created_at?: string
+          feedback?: string | null
+          id?: string
+          overall_rating?: number
+          resolution_quality?: string
+          speed_rating?: number
+          staff_rating?: number
+          suggestions?: string | null
+          user_id?: string
+          would_recommend?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "satisfaction_surveys_complaint_id_fkey"
+            columns: ["complaint_id"]
+            isOneToOne: true
+            referencedRelation: "complaints"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
