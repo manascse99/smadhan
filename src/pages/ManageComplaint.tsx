@@ -594,6 +594,11 @@ const ManageComplaint = () => {
               </Card>
             )}
 
+            {/* Citizen Satisfaction Survey Results */}
+            {complaint.status === 'resolved' && (
+              <SurveyResultsCard complaintId={complaint.id} />
+            )}
+
             {/* Previous Updates */}
             {previousUpdates.length > 0 && (
               <Card className="p-6">
