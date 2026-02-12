@@ -1,4 +1,4 @@
-import { Shield, Zap, Users, Target } from "lucide-react";
+import { Shield, Zap, Users, Target, FileText, Search, BarChart3, Bell, CheckCircle, Brain, MapPin, Star, Lock, HeadphonesIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
