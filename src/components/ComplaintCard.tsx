@@ -198,15 +198,16 @@ export const ComplaintCard = ({ complaint, onUpvote, onFeedbackSubmit }: Complai
             </div>
           )}
 
-          {/* Survey Dialog */}
-          <SatisfactionSurvey 
-            complaintId={complaint.id}
-            open={showSurvey}
-            onOpenChange={setShowSurvey}
-            onSubmit={handleFeedbackSubmit}
-          />
         </div>
       </Card>
+
+      {/* Survey Dialog - outside Card to prevent click bubbling */}
+      <SatisfactionSurvey 
+        complaintId={complaint.id}
+        open={showSurvey}
+        onOpenChange={setShowSurvey}
+        onSubmit={handleFeedbackSubmit}
+      />
 
       {/* Full Details Dialog */}
       <Dialog open={showDetails} onOpenChange={setShowDetails}>
