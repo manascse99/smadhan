@@ -226,16 +226,16 @@ const FileComplaint = () => {
         setVerificationStatus('warning');
         toast.warning("Images verified with warnings. You can still submit, but consider uploading clearer images.");
       } else if (results.every(r => r === null)) {
-        toast.error("Could not verify images. Please try again.");
-        setVerificationStatus('idle');
+        toast.warning("Could not verify images due to a temporary issue. You can still submit your complaint.");
+        setVerificationStatus('warning');
       } else {
         setVerificationStatus('verified');
         toast.success("✅ All images verified successfully! Your complaint is ready to submit.");
       }
     } catch (err) {
       console.error("Verification error:", err);
-      toast.error("Verification failed. Please try again.");
-      setVerificationStatus('idle');
+      toast.warning("Verification service temporarily unavailable. You can still submit your complaint.");
+      setVerificationStatus('warning');
     } finally {
       setIsVerifying(false);
     }
