@@ -30,21 +30,35 @@ serve(async (req) => {
       ? `The user selected complaint category: "${category}".`
       : `No category has been selected yet.`;
 
-    const systemPrompt = `You are an AI image analyst for a civic complaint management system. Analyze the uploaded image and determine what civic issue it shows.
-
-Categories available: Water Supply, Road & Transport, Electricity, Waste Management, Public Safety, Healthcare, Education, Other.
+    const systemPrompt = `You are a STRICT image validator for a civic complaint system. Your job is to REJECT fake, irrelevant, or unrelated images.
 
 ${categoryContext}
 
-Respond ONLY with a valid JSON object (no markdown, no code fences) with these exact fields:
-- "match": boolean - whether the image matches the selected complaint category. True if it matches or no category selected.
-- "confidence": number - confidence score from 0 to 1 for the category match.
-- "detected": string - brief description of what was detected in the image (e.g. "garbage pile on roadside", "pothole on asphalt road").
-- "suggestedCategory": string - one of: "Water Supply", "Road & Transport", "Electricity", "Waste Management", "Public Safety", "Healthcare", "Education", "Other"
-- "suggestedDescription": string - a suggested complaint description based on the image content (1-2 sentences).
-- "imageQuality": string - one of: "good", "blurry", "dark", "unclear"
+CRITICAL RULES:
+1. The image MUST be a real photograph taken outdoors or at the actual location of a civic issue.
+2. REJECT (match=false, confidence=0.95) these types of images:
+   - Screenshots of any kind (code editors, websites, apps, phones)
+   - Photos of screens, monitors, or displays
+   - Selfies, food photos, indoor furniture, shoes, clothing
+   - Stock photos, memes, drawings, or AI-generated images
+   - Any image NOT showing a real civic infrastructure problem
+3. For "Road & Transport": ONLY accept images showing actual road conditions like potholes, cracks, damaged roads, broken footpaths, traffic issues, waterlogged roads.
+4. For "Water Supply": ONLY accept images of water leaks, broken pipes, dirty water, water shortage.
+5. For "Electricity": ONLY accept images of fallen poles, broken wires, no streetlights, electrical hazards.
+6. For "Waste Management": ONLY accept images of garbage dumps, overflowing bins, littered areas.
+7. For "Public Safety": ONLY accept images of broken railings, unsafe structures, missing manhole covers.
+8. For "Healthcare": ONLY accept images of hospital/clinic conditions, medical facility issues.
+9. For "Education": ONLY accept images of school/college infrastructure issues.
 
-If the image is completely unrelated to any civic issue (e.g. a selfie, food photo, random object), set match to false, confidence to 0.9+, and detected to what you actually see.`;
+Respond ONLY with a valid JSON object (no markdown, no code fences):
+- "match": boolean - true ONLY if the image genuinely matches the selected category
+- "confidence": number (0-1) - how confident you are
+- "detected": string - what you actually see in the image
+- "suggestedCategory": one of: "Water Supply", "Road & Transport", "Electricity", "Waste Management", "Public Safety", "Healthcare", "Education", "Other"
+- "suggestedDescription": string - 1-2 sentence complaint description (empty if not a civic issue)
+- "imageQuality": one of: "good", "blurry", "dark", "unclear"
+
+BE STRICT. When in doubt, set match to false.`;
 
     // Extract the base64 data and mime type
     let mimeType = "image/jpeg";
@@ -67,7 +81,7 @@ If the image is completely unrelated to any civic issue (e.g. a selfie, food pho
       }
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
