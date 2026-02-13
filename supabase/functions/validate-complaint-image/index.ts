@@ -58,84 +58,113 @@ If the image is completely unrelated to any civic issue (e.g. a selfie, food pho
       }
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: systemPrompt },
-                {
-                  text: "Analyze this complaint image. Determine if it matches the selected category, what you detect in the image, suggest the best category, suggest a description, and check image quality. Respond with JSON only.",
-                },
-                {
-                  inlineData: {
-                    mimeType,
-                    data: base64Data,
-                  },
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 1024,
-          },
-        }),
+    // Try with retry and backoff for rate limiting
+    let lastError = "";
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) {
+        // Wait before retry
+        await new Promise(r => setTimeout(r, 2000));
       }
-    );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini API error:", response.status, errorText);
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: systemPrompt },
+                  {
+                    text: "Analyze this complaint image. Respond with JSON only.",
+                  },
+                  {
+                    inlineData: {
+                      mimeType,
+                      data: base64Data,
+                    },
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 512,
+            },
+          }),
+        }
+      );
 
       if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        lastError = "Rate limit exceeded";
+        console.warn(`Rate limited on attempt ${attempt + 1}, retrying...`);
+        continue;
       }
-      throw new Error(`Gemini API error: ${response.status}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Gemini API error:", response.status, errorText);
+        lastError = `Gemini API error: ${response.status}`;
+        continue;
+      }
+
+      const data = await response.json();
+      const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!textContent) {
+        lastError = "No response from Gemini";
+        continue;
+      }
+
+      // Parse the JSON from Gemini's response (strip markdown fences if present)
+      let cleanJson = textContent.trim();
+      if (cleanJson.startsWith("```")) {
+        cleanJson = cleanJson.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+      }
+
+      const result = JSON.parse(cleanJson);
+
+      // Validate required fields
+      const validated = {
+        match: typeof result.match === "boolean" ? result.match : false,
+        confidence: typeof result.confidence === "number" ? result.confidence : 0.5,
+        detected: typeof result.detected === "string" ? result.detected : "Unable to determine",
+        suggestedCategory: result.suggestedCategory || "Other",
+        suggestedDescription: result.suggestedDescription || "",
+        imageQuality: ["good", "blurry", "dark", "unclear"].includes(result.imageQuality) ? result.imageQuality : "good",
+      };
+
+      return new Response(JSON.stringify(validated), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const data = await response.json();
-    const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!textContent) {
-      throw new Error("No response from Gemini");
-    }
-
-    // Parse the JSON from Gemini's response (strip markdown fences if present)
-    let cleanJson = textContent.trim();
-    if (cleanJson.startsWith("```")) {
-      cleanJson = cleanJson.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
-    }
-
-    const result = JSON.parse(cleanJson);
-
-    // Validate required fields
-    const validated = {
-      match: typeof result.match === "boolean" ? result.match : false,
-      confidence: typeof result.confidence === "number" ? result.confidence : 0.5,
-      detected: typeof result.detected === "string" ? result.detected : "Unable to determine",
-      suggestedCategory: result.suggestedCategory || "Other",
-      suggestedDescription: result.suggestedDescription || "",
-      imageQuality: ["good", "blurry", "dark", "unclear"].includes(result.imageQuality) ? result.imageQuality : "good",
-    };
-
-    return new Response(JSON.stringify(validated), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("validate-complaint-image error:", error);
+    // All retries exhausted - return a soft failure that won't block submission
     return new Response(
       JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error",
+        match: true,
+        confidence: 0.5,
+        detected: "Verification temporarily unavailable",
+        suggestedCategory: category || "Other",
+        suggestedDescription: "",
+        imageQuality: "good",
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("validate-complaint-image error:", error);
+    // Return soft failure instead of 500 error
+    return new Response(
+      JSON.stringify({
+        match: true,
+        confidence: 0.5,
+        detected: "Verification temporarily unavailable",
+        suggestedCategory: "Other",
+        suggestedDescription: "",
+        imageQuality: "good",
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
