@@ -12,9 +12,9 @@ serve(async (req) => {
   }
 
   try {
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     const { imageBase64, category } = await req.json();
@@ -72,103 +72,92 @@ BE STRICT. When in doubt, set match to false.`;
       }
     }
 
-    // Try with retry and backoff for rate limiting
-    let lastError = "";
-    for (let attempt = 0; attempt < 2; attempt++) {
-      if (attempt > 0) {
-        // Wait before retry
-        await new Promise(r => setTimeout(r, 2000));
-      }
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: systemPrompt },
-                  {
-                    text: "Analyze this complaint image. Respond with JSON only.",
+    const response = await fetch(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: systemPrompt },
+                {
+                  type: "text",
+                  text: "Analyze this complaint image. Respond with JSON only.",
+                },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: `data:${mimeType};base64,${base64Data}`,
                   },
-                  {
-                    inlineData: {
-                      mimeType,
-                      data: base64Data,
-                    },
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 512,
+                },
+              ],
             },
-          }),
-        }
-      );
+          ],
+          temperature: 0.2,
+          max_tokens: 512,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("AI Gateway error:", response.status, errorText);
 
       if (response.status === 429) {
-        lastError = "Rate limit exceeded";
-        console.warn(`Rate limited on attempt ${attempt + 1}, retrying...`);
-        continue;
+        return new Response(
+          JSON.stringify({
+            match: true,
+            confidence: 0.5,
+            detected: "Verification temporarily unavailable (rate limited)",
+            suggestedCategory: category || "Other",
+            suggestedDescription: "",
+            imageQuality: "good",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Gemini API error:", response.status, errorText);
-        lastError = `Gemini API error: ${response.status}`;
-        continue;
-      }
-
-      const data = await response.json();
-      const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (!textContent) {
-        lastError = "No response from Gemini";
-        continue;
-      }
-
-      // Parse the JSON from Gemini's response (strip markdown fences if present)
-      let cleanJson = textContent.trim();
-      if (cleanJson.startsWith("```")) {
-        cleanJson = cleanJson.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
-      }
-
-      const result = JSON.parse(cleanJson);
-
-      // Validate required fields
-      const validated = {
-        match: typeof result.match === "boolean" ? result.match : false,
-        confidence: typeof result.confidence === "number" ? result.confidence : 0.5,
-        detected: typeof result.detected === "string" ? result.detected : "Unable to determine",
-        suggestedCategory: result.suggestedCategory || "Other",
-        suggestedDescription: result.suggestedDescription || "",
-        imageQuality: ["good", "blurry", "dark", "unclear"].includes(result.imageQuality) ? result.imageQuality : "good",
-      };
-
-      return new Response(JSON.stringify(validated), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      throw new Error(`AI Gateway error: ${response.status}`);
     }
 
-    // All retries exhausted - return a soft failure that won't block submission
-    return new Response(
-      JSON.stringify({
-        match: true,
-        confidence: 0.5,
-        detected: "Verification temporarily unavailable",
-        suggestedCategory: category || "Other",
-        suggestedDescription: "",
-        imageQuality: "good",
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    const data = await response.json();
+    const textContent = data.choices?.[0]?.message?.content;
+
+    if (!textContent) {
+      throw new Error("No response from AI");
+    }
+
+    // Parse the JSON from AI response (strip markdown fences if present)
+    let cleanJson = textContent.trim();
+    if (cleanJson.startsWith("```")) {
+      cleanJson = cleanJson.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+    }
+
+    const result = JSON.parse(cleanJson);
+
+    // Validate required fields
+    const validated = {
+      match: typeof result.match === "boolean" ? result.match : false,
+      confidence: typeof result.confidence === "number" ? result.confidence : 0.5,
+      detected: typeof result.detected === "string" ? result.detected : "Unable to determine",
+      suggestedCategory: result.suggestedCategory || "Other",
+      suggestedDescription: result.suggestedDescription || "",
+      imageQuality: ["good", "blurry", "dark", "unclear"].includes(result.imageQuality) ? result.imageQuality : "good",
+    };
+
+    return new Response(JSON.stringify(validated), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("validate-complaint-image error:", error);
-    // Return soft failure instead of 500 error
+    // Return soft failure so user can still submit
     return new Response(
       JSON.stringify({
         match: true,
