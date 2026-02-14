@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Send, X, User, Mail, Phone, Sparkles, ShieldCheck, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Upload, Send, X, User, Mail, Phone, Sparkles, ShieldCheck, Loader2, AlertTriangle, CheckCircle2, ThumbsUp, Search } from "lucide-react";
 import ImageValidationBadge from "@/components/ImageValidationBadge";
 import { useImageValidation } from "@/hooks/useImageValidation";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,21 @@ const FileComplaint = () => {
   const [pendingSubmit, setPendingSubmit] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+  const [duplicateResult, setDuplicateResult] = useState<{
+    isDuplicate: boolean;
+    confidence: number;
+    matchingComplaintId?: string;
+    matchingReason?: string;
+    matchingComplaint?: {
+      id: string;
+      title: string;
+      category: string;
+      location_address: string;
+      upvotes: number;
+      status: string;
+    };
+  } | null>(null);
   const [verificationStatus, setVerificationStatus] = useState<'idle' | 'verified' | 'failed' | 'warning'>('idle');
   const [formData, setFormData] = useState({
     fullName: "",
@@ -188,6 +203,7 @@ const FileComplaint = () => {
 
     setIsVerifying(true);
     setVerificationStatus('idle');
+    setDuplicateResult(null);
 
     try {
       // Validate all images and collect results directly
@@ -231,6 +247,32 @@ const FileComplaint = () => {
       } else {
         setVerificationStatus('verified');
         toast.success("✅ All images verified successfully! Your complaint is ready to submit.");
+      }
+
+      // Run duplicate detection (only if verification didn't fail)
+      if (allPassed) {
+        setIsCheckingDuplicate(true);
+        try {
+          const firstImageBase64 = await fileToBase64(images[0]);
+          const { data: dupData, error: dupError } = await supabase.functions.invoke("detect-duplicate-complaint", {
+            body: {
+              imageBase64: firstImageBase64,
+              category: formData.category,
+              locationLat: formData.locationLat,
+              locationLng: formData.locationLng,
+              title: formData.title,
+              description: formData.description,
+            },
+          });
+          if (!dupError && dupData?.isDuplicate) {
+            setDuplicateResult(dupData);
+            toast.warning("A similar complaint already exists in your area!");
+          }
+        } catch (dupErr) {
+          console.error("Duplicate check failed (non-blocking):", dupErr);
+        } finally {
+          setIsCheckingDuplicate(false);
+        }
       }
     } catch (err) {
       console.error("Verification error:", err);
@@ -609,13 +651,67 @@ const FileComplaint = () => {
                 </div>
               )}
 
+              {/* Duplicate Detection Alert */}
+              {isCheckingDuplicate && (
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-muted border border-border">
+                  <Loader2 className="w-5 h-5 shrink-0 animate-spin text-primary" />
+                  <div>
+                    <p className="font-medium">Checking for similar complaints...</p>
+                    <p className="text-sm text-muted-foreground">AI is comparing your complaint with existing ones in the area.</p>
+                  </div>
+                </div>
+              )}
+
+              {duplicateResult?.isDuplicate && duplicateResult.matchingComplaint && (
+                <div className="p-5 rounded-lg bg-accent/50 border-2 border-accent">
+                  <div className="flex items-start gap-3">
+                    <Search className="w-6 h-6 shrink-0 text-primary mt-0.5" />
+                    <div className="flex-1 space-y-3">
+                      <div>
+                        <p className="font-semibold text-lg">Similar Complaint Already Exists!</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {duplicateResult.matchingReason}
+                        </p>
+                      </div>
+                      <div className="bg-background rounded-md p-4 border border-border space-y-2">
+                        <p className="font-medium">{duplicateResult.matchingComplaint.title}</p>
+                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          <span className="bg-muted px-2 py-0.5 rounded">{duplicateResult.matchingComplaint.category}</span>
+                          <span className="bg-muted px-2 py-0.5 rounded">{duplicateResult.matchingComplaint.status}</span>
+                          <span className="bg-muted px-2 py-0.5 rounded">📍 {duplicateResult.matchingComplaint.location_address}</span>
+                          <span className="bg-muted px-2 py-0.5 rounded">👍 {duplicateResult.matchingComplaint.upvotes} upvotes</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
+                        <Button
+                          type="button"
+                          onClick={() => navigate(`/track-complaint?id=${duplicateResult.matchingComplaint!.id}`)}
+                          className="flex-1"
+                        >
+                          <ThumbsUp className="w-4 h-4 mr-2" />
+                          View & Upvote This Complaint
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setDuplicateResult(null)}
+                          className="flex-1"
+                        >
+                          Submit Anyway
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Verify & Submit Buttons */}
               <div className="flex flex-col gap-3 pt-6">
                 {images.length > 0 && (
                   <Button
                     type="button"
                     onClick={handleVerifyComplaint}
-                    disabled={isVerifying || images.length === 0 || !formData.category}
+                    disabled={isVerifying || isCheckingDuplicate || images.length === 0 || !formData.category}
                     variant={verificationStatus === 'verified' ? 'outline' : 'secondary'}
                     className="w-full"
                     size="lg"
