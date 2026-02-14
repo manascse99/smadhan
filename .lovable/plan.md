@@ -1,65 +1,77 @@
 
 
-## Full Satisfaction Survey Form for Resolved Complaints
+# Duplicate Complaint Detection System
 
-### What Changes
+## Overview
+When a user files a new complaint, the system will use AI to compare the uploaded image and location against existing complaints in the same category and area. If a duplicate is found, the user is redirected to the existing complaint where they can upvote it instead of creating a duplicate.
 
-When a complaint is marked as "Resolved", the user who filed it will see a "Rate Experience" button. Clicking it will open a **full-page dialog form** (instead of the current small inline card) with the following fields:
+## How It Works
 
-### Survey Form Fields
+```text
+User fills complaint form
+        |
+        v
+Clicks "Verify Images" 
+        |
+        v
++---------------------------+
+| Check for duplicates      |
+| (AI image + location      |
+|  similarity analysis)     |
++---------------------------+
+        |
+   +---------+---------+
+   |                   |
+No duplicates      Duplicate found
+   |                   |
+   v                   v
+Normal submit     Show duplicate alert
+flow continues    with existing complaint
+                       |
+                       v
+                  "View & Upvote" button
+                  redirects to existing
+                  complaint on dashboard
+```
 
-1. **Overall Satisfaction** - 5-star rating (required)
-2. **Resolution Speed** - How satisfied with the time taken? (1-5 scale with labels: Very Slow, Slow, Average, Fast, Very Fast)
-3. **Staff Behavior** - How was the officer/staff behavior? (1-5 scale: Very Poor, Poor, Average, Good, Excellent)
-4. **Resolution Quality** - Was the problem actually fixed properly? (Yes / Partially / No radio buttons)
-5. **Would You Recommend** - Would you recommend this platform to others? (Yes / Maybe / No)
-6. **Detailed Feedback** - Text area for additional comments (optional, max 500 chars)
-7. **Improvement Suggestions** - What could be improved? (optional, max 300 chars)
+## Implementation Steps
 
-### How It Works
+### Step 1: Create the Duplicate Detection Edge Function
+A new backend function `detect-duplicate-complaint` that:
+- Receives the uploaded image (Base64), category, location (lat/lng), and description
+- Queries the database for existing complaints in the same category within a ~2km radius
+- Sends the new image + existing complaint images to Lovable AI (`google/gemini-2.5-flash`) asking it to compare visual similarity
+- Returns either "no duplicate" or the matching complaint ID, title, and similarity score
 
-- User sees "Rate Experience" button on resolved complaint cards in their Dashboard
-- Clicking opens a full Dialog with the survey form
-- All ratings are required except the two text fields
-- On submit, data is saved to a new `satisfaction_surveys` table in the database
-- The `satisfaction_rating` on the `complaints` table is also updated with the overall rating
-- Success toast shown and the survey section updates to show "Feedback Submitted" with the star rating
-- Admin can view this feedback in the complaint management page
+### Step 2: Update the Complaint Filing Page
+Modify `FileComplaint.tsx` to:
+- Add a "Check for Duplicates" step that runs automatically during image verification
+- If a duplicate is detected, show a prominent alert card with:
+  - The existing complaint's title, category, location, and upvote count
+  - A "View & Upvote This Complaint" button that navigates to the complaint feed/dashboard
+  - A "File Anyway" option for cases where the user believes it's a different issue
+- If no duplicate is found, proceed with the normal submission flow
 
-### Database Changes
+### Step 3: Update `supabase/config.toml`
+Register the new edge function with `verify_jwt = false` (auth handled in code).
 
-**New table: `satisfaction_surveys`**
-| Column | Type | Notes |
-|---|---|---|
-| id | uuid | Primary key |
-| complaint_id | text | Links to complaints table |
-| user_id | uuid | Who submitted |
-| overall_rating | integer | 1-5 |
-| speed_rating | integer | 1-5 |
-| staff_rating | integer | 1-5 |
-| resolution_quality | text | 'yes', 'partially', 'no' |
-| would_recommend | text | 'yes', 'maybe', 'no' |
-| feedback | text | Optional comments |
-| suggestions | text | Optional suggestions |
-| created_at | timestamptz | Auto |
+## Technical Details
 
-**RLS Policies:**
-- Users can insert their own surveys (user_id = auth.uid())
-- Users can view their own surveys
-- Admins/officers can view all surveys
+### Duplicate Detection Logic
+1. **Location filter**: Query complaints table for same `category` within ~2km using lat/lng bounding box (no PostGIS needed -- simple math filter)
+2. **Image comparison**: Send the new image alongside up to 3 nearby complaint images to the AI model with a prompt like: "Compare these images. Are they showing the same civic issue at the same location? Return a JSON with `isDuplicate` (boolean), `confidence` (0-1), and `matchingReason` (string)."
+3. **Text similarity**: The AI prompt also includes the title/description of both complaints for additional context
+4. **Threshold**: Only flag as duplicate if confidence >= 0.75
 
-### Technical Steps
+### UI Flow for Duplicate Found
+- A yellow/orange alert card appears below the verification section
+- Shows: "Similar complaint already exists!" with complaint details
+- Two action buttons: "View & Upvote" (primary) and "Submit Anyway" (secondary/outline)
+- "View & Upvote" navigates to `/track-complaint?id=EXISTING_ID`
 
-1. **Create `satisfaction_surveys` table** via database migration with RLS policies
-2. **Replace `SatisfactionSurvey` component** with a full Dialog-based form containing all fields above
-3. **Update `ComplaintCard`** to open the new survey dialog and show submitted feedback summary
-4. **Update `ManageComplaint` (admin page)** to display detailed survey responses for resolved complaints
-
-### Files Modified
-- `src/components/SatisfactionSurvey.tsx` - Complete rewrite with full form in a Dialog
-- `src/components/ComplaintCard.tsx` - Minor update to pass data to new survey
-- `src/pages/ManageComplaint.tsx` - Show survey results to admin
-
-### Files Created
-- Database migration for `satisfaction_surveys` table
+### Edge Cases
+- If the user has no images, skip image comparison and only do location + text similarity
+- If the AI gateway is unavailable, skip duplicate check silently (don't block submission)
+- Limit nearby complaint search to last 90 days to avoid stale matches
+- Only check against non-resolved complaints
 
