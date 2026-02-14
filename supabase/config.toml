@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.validate-complaint-image]
 verify_jwt = false
+
+[functions.detect-duplicate-complaint]
+verify_jwt = false
