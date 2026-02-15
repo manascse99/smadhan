@@ -56,33 +56,42 @@ const Auth = () => {
 
   // Check for Google OAuth redirect and new users
   useEffect(() => {
-    const checkOAuthUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        // Check if user has a role assigned
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", session.user.id)
-          .single();
+    const checkOAuthUser = async (userId: string, userMeta: any, email: string) => {
+      // Check if user has a role assigned
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .single();
 
-        if (!roleData) {
-          // New Google OAuth user - needs onboarding
-          const avatarUrl = session.user.user_metadata?.avatar_url || 
-                           session.user.user_metadata?.picture || "";
-          setOnboardingUser({
-            id: session.user.id,
-            email: session.user.email || "",
-            name: session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "",
-            avatarUrl: avatarUrl,
-          });
-          setShowOnboarding(true);
-        }
+      if (!roleData) {
+        // New Google OAuth user - needs onboarding
+        const avatarUrl = userMeta?.avatar_url || userMeta?.picture || "";
+        setOnboardingUser({
+          id: userId,
+          email: email || "",
+          name: userMeta?.full_name || email?.split("@")[0] || "",
+          avatarUrl: avatarUrl,
+        });
+        setShowOnboarding(true);
       }
     };
 
-    checkOAuthUser();
+    // Listen for auth state changes (catches OAuth redirects)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+          // Check if this is an OAuth user (no password-based identity)
+          const isOAuthUser = session.user.app_metadata?.provider === 'google' ||
+            session.user.identities?.some(i => i.provider === 'google');
+          if (isOAuthUser) {
+            checkOAuthUser(session.user.id, session.user.user_metadata, session.user.email || "");
+          }
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
