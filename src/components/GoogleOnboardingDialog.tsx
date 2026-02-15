@@ -46,35 +46,22 @@ export const GoogleOnboardingDialog = ({
 
     setIsLoading(true);
     try {
-      // Update profile with avatar URL from Google and department if officer
-      const profileUpdate: { avatar_url?: string; department?: string } = {};
-      
+      // Use the secure RPC function to set role (bypasses RLS safely)
+      const { error: onboardingError } = await supabase.rpc("complete_onboarding", {
+        _role: role,
+        _department: role === UserRole.OFFICER ? department : null,
+        _passkey: role === UserRole.OFFICER ? adminPasskey : null,
+      });
+
+      if (onboardingError) throw onboardingError;
+
+      // Update avatar URL from Google
       if (userAvatarUrl) {
-        profileUpdate.avatar_url = userAvatarUrl;
-      }
-      
-      if (role === UserRole.OFFICER) {
-        profileUpdate.department = department;
-      }
-
-      if (Object.keys(profileUpdate).length > 0) {
-        const { error: profileError } = await supabase
+        await supabase
           .from("profiles")
-          .update(profileUpdate)
+          .update({ avatar_url: userAvatarUrl })
           .eq("id", userId);
-
-        if (profileError) throw profileError;
       }
-
-      // Insert user role
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert([{
-          user_id: userId,
-          role: role,
-        }]);
-
-      if (roleError) throw roleError;
 
       toast.success("Account setup complete!");
       onComplete();
