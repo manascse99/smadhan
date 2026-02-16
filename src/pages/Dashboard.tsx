@@ -279,30 +279,33 @@ const Dashboard = () => {
 
             <div className="space-y-6">
               {/* Donut Chart Simulation */}
-              <div className="relative w-64 h-64 mx-auto">
+              <div className="relative w-48 h-48 mx-auto">
                 <svg viewBox="0 0 100 100" className="transform -rotate-90">
-                  {statusData.map((item, index) => {
-                    const prevPercentage = statusData
-                      .slice(0, index)
-                      .reduce((sum, s) => sum + s.percentage, 0);
-                    const strokeDasharray = `${item.percentage} ${100 - item.percentage}`;
-                    const strokeDashoffset = -prevPercentage;
-
-                    return (
-                      <circle
-                        key={index}
-                        cx="50"
-                        cy="50"
-                        r="40"
-                        fill="none"
-                        stroke={`hsl(var(--${item.color}))`}
-                        strokeWidth="20"
-                        strokeDasharray={strokeDasharray}
-                        strokeDashoffset={strokeDashoffset}
-                        className="transition-all duration-1000"
-                      />
-                    );
-                  })}
+                  {(() => {
+                    const radius = 35;
+                    const circumference = 2 * Math.PI * radius;
+                    let offset = 0;
+                    return statusData.filter(s => s.percentage > 0).map((item, index) => {
+                      const dash = (item.percentage / 100) * circumference;
+                      const gap = circumference - dash;
+                      const currentOffset = -offset;
+                      offset += dash;
+                      return (
+                        <circle
+                          key={index}
+                          cx="50"
+                          cy="50"
+                          r={radius}
+                          fill="none"
+                          stroke={`hsl(var(--${item.color}))`}
+                          strokeWidth="15"
+                          strokeDasharray={`${dash} ${gap}`}
+                          strokeDashoffset={currentOffset}
+                          className="transition-all duration-1000"
+                        />
+                      );
+                    });
+                  })()}
                 </svg>
               </div>
 
