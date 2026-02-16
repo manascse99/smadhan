@@ -118,10 +118,19 @@ const Dashboard = () => {
     setIsLoadingLocation(true);
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
+        async (position) => {
           const { latitude, longitude } = position.coords;
           setUserLocation({ lat: latitude, lng: longitude });
-          setLocationAddress(`Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`);
+          // Reverse geocode to get a human-readable address
+          try {
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=16&addressdetails=1`
+            );
+            const data = await res.json();
+            setLocationAddress(data.display_name || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          } catch {
+            setLocationAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          }
           toast.success("Location detected successfully");
           setIsLoadingLocation(false);
         },
