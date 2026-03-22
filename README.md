@@ -1,73 +1,100 @@
-# Welcome to your Lovable project
+Lok Samadhan – Smart Complaint Management Platform
+Project Overview
 
-## Project info
+Lok Samadhan is a digital platform designed to improve how civic complaints are reported, tracked, and resolved. It addresses everyday urban issues such as broken roads, garbage accumulation, water leakage, and faulty streetlights.
 
-**URL**: https://lovable.dev/projects/752026d9-2be3-4d8d-bd33-a67172612929
+The system ensures that complaints are not just registered, but are transparently tracked, verified with proof, and resolved with accountability.
 
-## How can I edit this code?
+Problem Statement
 
-There are several ways of editing your application.
+In existing systems, citizens can report issues, but:
 
-**Use Lovable**
+There is no clear visibility of progress
+Responsibility is unclear
+Complaints often remain unresolved or delayed
+There is no proof of work or verification
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/752026d9-2be3-4d8d-bd33-a67172612929) and start prompting.
+This leads to lack of trust and low citizen engagement.
 
-Changes made via Lovable will be committed automatically to this repo.
+Our Solution
 
-**Use your preferred IDE**
+Lok Samadhan transforms the complaint process into a structured and transparent workflow:
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+Citizens can easily submit complaints with text, images, or videos
+Each complaint is tracked from submission to resolution
+Officers must upload proof of work before closing a complaint
+Citizens verify the resolution before final closure
+Every action is securely recorded to prevent tampering
+Key Features
+1. Complaint Registration
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Users can file complaints with details such as title, description, category, location, and media evidence.
 
-Follow these steps:
+2. Real-Time Tracking
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
+Users can monitor complaint status through stages like Registered, In Progress, and Resolved.
+
+3. Proof-Based Resolution
+
+Officers must upload images or videos as proof before marking a complaint as resolved.
+
+4. User Verification
+
+Complaints are closed only after the citizen confirms satisfaction, with an option to reopen.
+
+5. AI-Based Image Validation
+
+The system detects fake or irrelevant images to maintain quality and authenticity.
+
+6. Blockchain-Based Record Security
+
+Complaint history is stored using hash-based logging to ensure it cannot be altered or deleted.
+
+7. Hierarchical Monitoring
+
+Senior officers can track and intervene in delayed complaints assigned to junior officers.
+
+8. Performance Tracking
+
+The system records officer performance based on resolution speed, count, and feedback.
+
+Technology Stack
+
+This project is built using:
+
+Vite
+TypeScript
+React
+shadcn-ui
+Tailwind CSS
+Getting Started (Local Development)
+Prerequisites
+Node.js
+npm
+Setup Steps
+# Clone the repository
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
+# Navigate to the project directory
 cd <YOUR_PROJECT_NAME>
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
-```
+Deployment
 
-**Edit a file directly in GitHub**
+The project can be deployed directly using Lovable:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Open the project on Lovable
+Click on Share → Publish
+Future Scope
+Duplicate complaint detection using AI
+Priority-based complaint ranking
+Budget and fund tracking using blockchain
+Predictive analytics for civic issue management
+Conclusion
 
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/752026d9-2be3-4d8d-bd33-a67172612929) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Lok Samadhan is not just a complaint platform.
+It is a system designed to ensure transparency, accountability, and trust between citizens and authorities by making every complaint trackable, verifiable, and actionable.
